@@ -1,10 +1,19 @@
 # Prompt Authoring
 
-{% if tool_prompt_builder %}
+{% if tool_prompt_builder and not tool_prompt_builder.valid %}
+
+## Refused
+
+Nothing was prepared or validated.
+
+{% for error in tool_prompt_builder.errors %}- {{ error }}
+{% endfor %}
+Send the call again with the names above.
+{% elif tool_prompt_builder %}
 
 ## Canonical Validation
 
-`valid` means the adapter prepared a call, not that the resource is valid. Supplied canonical fields and nested definitions are forwarded unchanged; legacy camelCase aliases remain accepted, with canonical values taking precedence.
+`valid` means the adapter prepared a call, not that the resource is valid. Supplied canonical fields and nested definitions are forwarded unchanged.
 
 ```json
 {{ tool_prompt_builder.auto_execute.params | dump(2) }}

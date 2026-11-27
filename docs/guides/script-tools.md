@@ -106,6 +106,12 @@ execution:
 | `strict: false` | Triggers if ANY required param present       |
 | `strict: true`  | Triggers only if ALL required params present |
 
+**Which arguments the script receives:** one entry per property `schema.json` declares. An argument
+sent as `file_path` reaches a property declared as `filePath`, and the other way round. When the
+schema declares both spellings, each reaches only the property of its own spelling, so a script
+can tell them apart (the `create_prompt` and `create_gate` builders use this to refuse a camelCase
+name and name the snake_case one to send). An argument the schema does not declare is not passed.
+
 ### explicit
 
 User must explicitly request:
@@ -566,8 +572,8 @@ Before this, such a key was dropped and the mutation ran with a success reply �
 believed it was emitting `preview_action` but spelled it `previewAction` performed the real write.
 The same rule the MCP boundary applies
 ([mcp-tools.md § Undeclared parameters](../reference/mcp-tools.md#undeclared-parameters)) now
-applies here, which is why the bundled tools remap `enforcementMode` → `enforcement_mode` rather
-than emitting the camelCase spelling.
+applies here, which is why a bundled tool never emits the camelCase spelling `enforcementMode`
+for `enforcement_mode`.
 
 ### A refused auto-execute fails the run
 

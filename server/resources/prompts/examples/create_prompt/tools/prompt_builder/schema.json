@@ -86,24 +86,24 @@
     },
     "systemMessage": {
       "type": "string",
-      "description": "Legacy alias for system_message; canonical value wins when both are supplied"
+      "description": "Refused; send system_message instead."
     },
     "userMessageTemplate": {
       "type": "string",
-      "description": "Legacy alias for user_message_template; canonical value wins when both are supplied"
+      "description": "Refused; send user_message_template instead."
     },
     "gateConfiguration": {
       "type": "object",
-      "description": "Legacy alias for gate_configuration; canonical value wins when both are supplied"
+      "description": "Refused; send gate_configuration instead."
     },
     "chainSteps": {
       "type": "array",
-      "description": "Legacy alias for chain_steps; canonical value wins when both are supplied",
+      "description": "Refused; send chain_steps instead.",
       "items": {}
     },
     "registerWithMcp": {
       "type": "boolean",
-      "description": "Legacy alias for register_with_mcp; canonical value wins when both are supplied"
+      "description": "Refused; send register_with_mcp instead."
     }
   },
   "required": ["id", "name", "description", "category"],

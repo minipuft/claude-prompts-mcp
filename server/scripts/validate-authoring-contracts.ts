@@ -73,7 +73,14 @@ const CONTROL_FIELDS = new Set([
   'framework',
   'skip_version',
 ]);
-const ALIASES: Record<CreationType, Record<string, string>> = {
+/**
+ * camelCase spellings the builders refuse, each with the snake_case name to send. They stay
+ * declared (in the builder schema and the registered prompt) because an argument the prompt does
+ * not declare is dropped without a word and one the schema does not declare reaches the builder
+ * already renamed; declared, it arrives under its own name and the builder can refuse it.
+ */
+type RefusedNames = Record<CreationType, Record<string, string>>;
+export const REFUSED_NAMES: RefusedNames = {
   prompt: {
     systemMessage: 'system_message',
     userMessageTemplate: 'user_message_template',
@@ -84,6 +91,7 @@ const ALIASES: Record<CreationType, Record<string, string>> = {
   gate: { enforcementMode: 'enforcement_mode' },
   framework: {},
 };
+const NO_REFUSED_NAMES: RefusedNames = { prompt: {}, gate: {}, framework: {} };
 
 /** The same enumeration used by the existing bundled-tool parameter-ownership suite. */
 export function bundledScriptTools(examplesDir = EXAMPLES_DIR): ToolOnDisk[] {
@@ -183,16 +191,25 @@ function fieldTypes(schema: JsonSchema): string[] {
   return (Array.isArray(schema.type) ? schema.type : schema.type ? [schema.type] : []).sort();
 }
 
-function declarationProblems(resource: AuthoringResource, expected: Record<string, JsonSchema>) {
+function declarationProblems(
+  resource: AuthoringResource,
+  expected: Record<string, JsonSchema>,
+  refusedNames: RefusedNames
+) {
   const problems: string[] = [];
   const properties = resource.schema.properties ?? {};
-  const aliases = ALIASES[resource.type];
+  const refused = refusedNames[resource.type];
   for (const name of Object.keys(expected)) {
     if (!(name in properties)) problems.push(`${name}: missing builder schema field`);
     if (!(name in resource.input)) problems.push(`${name}: missing round-trip fixture input`);
   }
+  for (const name of Object.keys(refused)) {
+    if (!(name in properties) || !resource.arguments.some((entry) => entry.name === name)) {
+      problems.push(`${name}: refused name must be declared in the builder schema and the prompt`);
+    }
+  }
   for (const [name, shape] of Object.entries(properties)) {
-    const canonical = aliases[name] ?? name;
+    const canonical = refused[name] ?? name;
     const canonicalShape = expected[canonical];
     if (!canonicalShape) {
       problems.push(`${name}: undeclared creation field`);
@@ -246,11 +263,41 @@ function outputProblems(
   return problems;
 }
 
+/** A refused spelling, alone or beside the canonical one, builds nothing and names the one to send. */
+function refusalProblems(
+  execute: (_tool: ToolOnDisk, _input: JsonObject) => ScriptOutput,
+  resource: AuthoringResource,
+  input: JsonObject,
+  refused: string,
+  canonical: string
+): string[] {
+  try {
+    const output = execute(resource.tool, input);
+    const problems: string[] = [];
+    if (output.valid !== false) problems.push(`${refused}: builder did not refuse the name`);
+    if (output.auto_execute !== undefined || output.draft !== undefined) {
+      problems.push(`${refused}: builder built a call from a refused name`);
+    }
+    const named = (output.errors ?? []).filter(
+      (line) => line.includes(`'${refused}'`) && line.includes(`'${canonical}'`)
+    );
+    if (named.length !== 1) {
+      problems.push(`${refused}: refusal must be one line naming '${refused}' and '${canonical}'`);
+    }
+    return problems;
+  } catch (error) {
+    return [
+      `${refused}: builder failed: ${error instanceof Error ? error.message : String(error)}`,
+    ];
+  }
+}
+
 /** Compare actual adapter output to inputs; checking only allowed output keys misses omissions. */
 export function validateAuthoringContracts(
   resources: AuthoringResource[],
   expected: CreationFields,
-  execute: (_tool: ToolOnDisk, _input: JsonObject) => ScriptOutput = runTool
+  execute: (_tool: ToolOnDisk, _input: JsonObject) => ScriptOutput = runTool,
+  refusedNames: RefusedNames = REFUSED_NAMES
 ): string[] {
   const problems: string[] = [];
   for (const type of RESOURCE_TYPES) {
@@ -264,7 +311,7 @@ export function validateAuthoringContracts(
       problems.push(`${prefix}: empty canonical creation field set`);
     const report = (errors: string[]) =>
       problems.push(...errors.map((error) => `${prefix}/${error}`));
-    report(declarationProblems(resource, fields));
+    report(declarationProblems(resource, fields, refusedNames));
     if (resource.guidance !== undefined) {
       for (const key of [
         'semantic_evaluation',
@@ -320,22 +367,19 @@ export function validateAuthoringContracts(
           check({ ...resource.input, [key]: value }, key);
       }
     }
-    for (const [alias, canonical] of Object.entries(ALIASES[resource.type])) {
-      if (!(alias in (resource.schema.properties ?? {}))) continue;
-      const input = { ...resource.input, [alias]: resource.input[canonical] };
-      delete input[canonical];
-      check(input, alias, canonical);
-      // A legacy alias must not overwrite an explicitly supplied canonical input.
-      const value = resource.input[canonical];
-      const conflicting =
-        typeof value === 'boolean'
-          ? !value
-          : typeof value === 'string'
-            ? `${value} legacy alias`
-            : Array.isArray(value)
-              ? [{ legacyAliasMarker: true }]
-              : { legacyAliasMarker: true };
-      check({ ...resource.input, [alias]: conflicting }, canonical);
+    for (const [refused, canonical] of Object.entries(refusedNames[resource.type])) {
+      const alone = { ...resource.input, [refused]: resource.input[canonical] };
+      delete alone[canonical];
+      report(refusalProblems(execute, resource, alone, refused, canonical));
+      report(
+        refusalProblems(
+          execute,
+          resource,
+          { ...resource.input, [refused]: resource.input[canonical] },
+          refused,
+          canonical
+        )
+      );
     }
   }
   return [...new Set(problems)];
@@ -402,24 +446,44 @@ function selfTest() {
     };
     return { valid: true, ...(type === 'prompt' ? { auto_execute: call } : { draft: call }) };
   };
-  assert.deepEqual(validateAuthoringContracts(resources, expected, execute), []);
+  assert.deepEqual(validateAuthoringContracts(resources, expected, execute, NO_REFUSED_NAMES), []);
   const missing = structuredClone(resources);
   delete missing[0]!.schema.properties!['name'];
   assert(
-    validateAuthoringContracts(missing, expected, execute).some((error) =>
+    validateAuthoringContracts(missing, expected, execute, NO_REFUSED_NAMES).some((error) =>
       error.includes('missing builder schema field')
     )
   );
-  assert(validateAuthoringContracts([], expected, execute).length === 3);
+  assert(validateAuthoringContracts([], expected, execute, NO_REFUSED_NAMES).length === 3);
   const dropping = (tool: ToolOnDisk, input: JsonObject) =>
     execute(tool, { ...input, name: undefined });
   assert(
-    validateAuthoringContracts(resources, expected, dropping).some((error) =>
+    validateAuthoringContracts(resources, expected, dropping, NO_REFUSED_NAMES).some((error) =>
       error.includes('adapter lost')
     )
   );
+  // A refused spelling: declared, refused by the builder, and a builder that accepts it is caught.
+  const refused = { prompt: { oldName: 'name' }, gate: {}, framework: {} };
+  const declaring = structuredClone(resources);
+  declaring[0]!.schema.properties!['oldName'] = { type: 'string' };
+  declaring[0]!.arguments.push({ name: 'oldName', type: 'string' });
+  const refusing = (tool: ToolOnDisk, input: JsonObject): ScriptOutput =>
+    'oldName' in input
+      ? { valid: false, errors: ["'oldName' is not an argument of create_prompt; send 'name'."] }
+      : execute(tool, input);
+  assert.deepEqual(validateAuthoringContracts(declaring, expected, refusing, refused), []);
+  assert(
+    validateAuthoringContracts(declaring, expected, execute, refused).some((error) =>
+      error.includes('builder did not refuse the name')
+    )
+  );
+  assert(
+    validateAuthoringContracts(resources, expected, refusing, refused).some((error) =>
+      error.includes('refused name must be declared')
+    )
+  );
   console.log(
-    'Authoring contract self-test: clean, missing field, lost mapping, empty enumeration passed'
+    'Authoring contract self-test: clean, missing field, lost mapping, empty enumeration, refused name passed'
   );
 }
 

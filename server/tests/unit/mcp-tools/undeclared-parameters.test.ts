@@ -114,8 +114,7 @@ describe('undeclared parameter refusal', () => {
 
   describe('nearest declared name', () => {
     it('suggests the contract spelling of a camelCase key (enforcementMode)', () => {
-      // The case R50 names. `gate_builder/script.py` already remaps this by hand, which is what a
-      // silent strip cost the last time: the tool had to learn the correction out of band.
+      // The case R50 names: a silent strip left the caller no way to learn the contract spelling.
       expect(
         nearestDeclaredParameter('enforcementMode', DECLARED_PARAMETERS_BY_TOOL.resource_manager)
       ).toBe('enforcement_mode');
