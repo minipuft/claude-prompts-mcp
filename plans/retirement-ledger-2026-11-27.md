@@ -16,8 +16,8 @@ tags: [contracts, runtime, parsers, config, docs, validation]
 ## Now (2026-11-27)
 
 Goal: a spelling the product stopped supporting is refused with its replacement, is recorded once in a ledger that names when the refusal itself is deleted, and is named nowhere a user reads except one generated page.
-Slice: T1 merged as #550. T2 is pull request #551. T3 on `feat/accepted-old-forms-removed` is done except two rows that wait on a release: the ledger holds 18 entries, the wording check keeps one exemption (a word that names something in the user's project), and nothing this repository ships sends prompt values in `options`.
-Next decision: the owner's. When 6.0.0 is cut, gemini-prompts pull request 54 can merge (row 3.7); refusing prompt values in `options` (row 3.1) follows once that hook has shipped, in 6.0.0 if the owner accepts that installed Gemini extensions fail until updated, otherwise in the next major.
+Slice: all three tiers are on `main`: #550 (the ledger, its gate, the generated page), #551 (six groups of old input refused, the wording check), #552 (builder argument names refused, declared refusal sites, this repository's own callers moved off `options`). The ledger holds 18 entries; the earliest refusal is forgotten after 2027-02-07. The owner's profile starts on the merged code.
+Next decision: the owner's. When 6.0.0 is cut, gemini-prompts pull request 54 can merge (row 3.7); refusing prompt values in `options` (row 3.1) follows once that hook has shipped, in 6.0.0 if the owner accepts that installed Gemini extensions fail until updated, otherwise in the next major. Two naming questions are open: the `include_legacy` parameter and whether one config file name is retired.
 Constraint: the standalone `cpm` bundle is 4,040 bytes under its 500 KB budget; a ledger entry `cpm` can reach costs bytes there. No upgrade command is added: owner ruling R33 (2026-09-15) stands.
 
 ## Intent
