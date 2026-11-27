@@ -110,6 +110,8 @@ repo/
 | `npm run test:integration`                  | Integration tests only                                                          |
 | `npm run test:coverage`                     | Coverage report (target: >80%)                                                  |
 | `npm run generate:contracts`                | Regenerate MCP schemas from contracts                                           |
+| `npm run generate:retirements-doc`          | Regenerate `docs/reference/upgrading.md` from the retirement ledger             |
+| `npm run validate:retirements`              | Check the retirement ledger against its refusals, tests, docs and page          |
 | `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing                                      |
 
 `test:unit` and `test:coverage` run every unit file through one Jest worker
@@ -233,6 +235,42 @@ All docs live under `docs/` organized by [Diataxis](https://diataxis.fr/) intent
 - Update docs **in the same changeset** as code -- no deferred TODOs.
 - Verify references against `server/dist/**` for behavioral accuracy.
 - Consult [Docs Index](docs/README.md) before creating new files.
+
+### Retiring a Spelling
+
+A spelling the product stops accepting (an environment variable, a config key, a resource field, a
+command operator) is refused, never accepted with a note: it is either accepted or refused. Retiring
+one is a breaking change and ships in a major release. The steps:
+
+1. Add one entry to `server/tooling/contracts/registries/retirements.json`: the retired spelling,
+   what replaces it, `refusedIn` (the release that begins the refusal), `forgetAfter` (the date
+   after which the refusal itself is deleted) and a `docPattern` no user-facing text may match, or
+   `null` with a `docPatternReason`.
+2. Make the boundary that read the spelling refuse it, composing its message from
+   `retirementNotice('<id>')` (`server/src/shared/utils/retirement-notice.ts`), so the replacement
+   is written once.
+3. Add a driver for the id to `DRIVERS` in
+   `server/tests/unit/retirements/retirement-refusals.test.ts`; it feeds the old spelling to the
+   real boundary and reads the refusal.
+4. Delete the code path that accepted the spelling and every mention of it in docs and shipped
+   text. Guides describe the current form only.
+5. Run `npm run generate:retirements-doc` and commit `docs/reference/upgrading.md`, the one page
+   where a user reads the old name.
+
+`npm run validate:retirements` (inside `validate:all`) fails an entry with no refusal site or no
+driver, a `retirementNotice` call naming no entry, a user-facing line matching a `docPattern`, and
+an upgrade page that differs from what the ledger renders. `npm run retirements:list` prints each
+entry with its dates and its refusal sites.
+
+**How long a refusal lasts.** `forgetAfter` defaults to six months after the release that begins
+the refusal; each entry carries its own date, so a different lifetime is that entry's own choice.
+From that date every validation run prints a warning naming the entry, and the pull-request step
+`scripts/warn-retirement-expiry.mjs` in `ci.yml` annotates the pull request. The warning never
+fails a change. The first major release cut after the date fails `validate:retirements` until the
+entry is forgotten.
+
+**Forgetting.** Delete the entry, its refusal site and its driver in one commit, and regenerate the
+page. The old spelling is then unknown input and gets what any unknown input gets.
 
 ## Commit Conventions
 
@@ -410,6 +448,10 @@ versions; a release that leaves the template alone stays quiet. It is about the 
 review, and only a separate adoption pull request clears it, so do not fix it inside an unrelated
 PR. `pr:check` lists it in `ADVISORY_CI_STEPS` instead of running it, and the parity test fails if
 an unmirrored workflow step is missing from that list or lacks `continue-on-error: true`.
+
+A second warning step, `scripts/warn-retirement-expiry.mjs` in `ci.yml`, annotates a pull request
+when a retired spelling's refusal is past its `forgetAfter` date; see
+[Retiring a Spelling](#retiring-a-spelling).
 
 **The squash-message check reads the commit the merge will write, not the body you wrote.**
 GitHub re-flows the PR body at 72 columns when it writes the squash commit, and release-please

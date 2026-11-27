@@ -460,21 +460,6 @@ cpm enable resources --json         # resources.registerWithMcp = true (JSON out
 
 Reports "already enabled/disabled" without writing when the value is unchanged. Exit codes: `0` success, `1` unknown subsystem or error.
 
-> **Removed in 3.1.2: the `analysis` subsystem.** It switched on an outbound LLM side client that
-> has been deleted, so `cpm enable analysis` now reports `Unknown subsystem`, and
-> `cpm config set analysis.semanticAnalysis.…` reports `Unknown configuration key`. Gate evaluation
-> by a model is served by the [`%judge` modifier](./judge-mode.md) and `gates.evaluation.defaultMode`,
-> which run in the client's own subagent rather than through an outbound API call — so no API key
-> is configured or stored.
->
-> **Removed in 5.0: the `analysis` section itself.** It is gone from `config.schema.json`, not just
-> unsettable. A `config.json` with no `version` key that still carries
-> `analysis.semanticAnalysis.llmIntegration.*` is read as a 4.x file and translated on load: the
-> section is dropped, and named in the one-time notice alongside every other renamed or dropped
-> key. A file already declaring `"version": 5` that still carries `analysis` is flagged by the
-> ordinary schema check instead. Delete the section (or add `"version": 5` and drop it) to silence
-> either warning.
-
 > **Changed in 3.1.2.** These nine keys were previously `*.mode` holding `"on"`/`"off"`, which no
 > reader consulted — the command reported success and changed nothing. A `config.json` still
 > carrying a `*.mode` key is adopted into the boolean on load, so no edit is required; `cpm config

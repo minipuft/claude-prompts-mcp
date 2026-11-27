@@ -56,6 +56,7 @@ _I need to look up syntax or API details._
 - **[Gate Configuration](reference/gate-configuration.md)**: `gate.yaml` configuration.
 - **[Template Syntax](reference/template-syntax.md)**: Nunjucks + custom extensions.
 - **[Client Capabilities](reference/client-capabilities.md)**: Client preset matrix, profile mapping, and integration limits.
+- **[Upgrading](reference/upgrading.md)**: Names the product no longer accepts and what to use instead (generated).
 
 > [!TIP]
 > **Looking up a parameter?** [MCP Tools](reference/mcp-tools.md) covers all three tools with examples. [Prompt Schema](reference/prompt-yaml-schema.md) covers every `prompt.yaml` field.

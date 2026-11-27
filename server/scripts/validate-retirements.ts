@@ -16,22 +16,38 @@
  *   2. every entry has a driver in the one table-driven refusal test (`DRIVERS` in
  *      `tests/unit/retirements/retirement-refusals.test.ts`), which feeds the old spelling to the
  *      real boundary; a driver for an id the ledger does not hold fails too.
+ *   3. no user-facing text matches an entry's `docPattern`. The text is the set defined once in
+ *      `scripts/lib/user-facing-scope.ts` (guides, READMEs, shipped resources, tool-contract
+ *      descriptions), read from `git ls-files`; the upgrade page and the changelog are exempt. An
+ *      entry whose `docPattern` is null is skipped.
  *   4. expiry (`scripts/lib/retirement-expiry.js`): an entry past its `forgetAfter` warns; it
  *      fails once the package's major is greater than the major of its `refusedIn`.
- * Checks 3, 5 and 6 (doc patterns, the generated page, third-state wording) are not here.
+ *   5. `docs/reference/upgrading.md` on disk is exactly what `generate-retirements-doc.ts`
+ *      renders from the ledger, so a hand edit or a stale page fails naming the command to run.
+ * Check 6 (third-state wording) is not here.
  *
  * `--list` prints the log instead: each entry with its dates and its sites as `file:line`.
  *
  * Run: `npm run validate:retirements` · the log: `npm run retirements:list`
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
 
+import {
+  GENERATE_COMMAND,
+  renderUpgradingPage,
+  UPGRADING_PAGE,
+} from './generate-retirements-doc.js';
 import { expiryOutcomes, isoToday } from './lib/retirement-expiry.js';
+import {
+  listUserFacingFiles,
+  readUserFacingLines,
+  type UserFacingLine,
+} from './lib/user-facing-scope.js';
 import { listRetirements, type RetirementEntry } from '../src/shared/utils/retirement-notice.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,16 +73,30 @@ export interface RetirementSite {
 
 /** A failed check, naming the entry (or the site) it is about. */
 export interface RetirementFinding {
-  readonly check: 1 | 2 | 4;
+  readonly check: 1 | 2 | 3 | 4 | 5;
   readonly subject: string;
   readonly message: string;
 }
 
+/** One user-facing file's lines, as `user-facing-scope.ts` reads them. */
+export interface ScannedText {
+  readonly file: string;
+  readonly lines: readonly UserFacingLine[];
+}
+
 export interface RetirementCheckInput {
-  readonly entries: readonly Pick<RetirementEntry, 'id' | 'refusedIn' | 'forgetAfter'>[];
+  readonly entries: readonly Pick<
+    RetirementEntry,
+    'id' | 'refusedIn' | 'forgetAfter' | 'docPattern'
+  >[];
   readonly sites: readonly RetirementSite[];
   /** Ids the driver table covers, or null when the table could not be found. */
   readonly driverIds: readonly string[] | null;
+  /** Every user-facing file, for check 3. */
+  readonly texts: readonly ScannedText[];
+  /** What the generator renders from the ledger, and the page as it is on disk (null: absent). */
+  readonly expectedPage: string;
+  readonly upgradingPage: string | null;
   readonly today: string;
   readonly packageVersion: string;
 }
@@ -211,7 +241,41 @@ export function checkDrivers(
   return [...undriven, ...stray];
 }
 
-/** Checks 1, 2 and 4 over planted or scanned input; pure. */
+/** Check 3: no user-facing line matches an entry's `docPattern`; a null pattern is skipped. */
+export function checkDocPatterns(
+  entries: RetirementCheckInput['entries'],
+  texts: readonly ScannedText[]
+): RetirementFinding[] {
+  const patterns = entries.flatMap((entry) =>
+    entry.docPattern === null ? [] : [{ id: entry.id, pattern: new RegExp(entry.docPattern) }]
+  );
+  return texts.flatMap(({ file, lines }) =>
+    lines.flatMap(({ line, text }) =>
+      patterns
+        .filter(({ pattern }) => pattern.test(text))
+        .map<RetirementFinding>(({ id }) => ({
+          check: 3,
+          subject: id,
+          message: `${file}:${line}: names the retired spelling of ${id}. Describe the current form; the old spelling lives on ${UPGRADING_PAGE}.`,
+        }))
+    )
+  );
+}
+
+/** Check 5: the upgrade page on disk is what the generator renders from the ledger. */
+export function checkUpgradingPage(expected: string, onDisk: string | null): RetirementFinding[] {
+  if (onDisk === expected) return [];
+  const state = onDisk === null ? 'does not exist' : 'is not what the ledger renders';
+  return [
+    {
+      check: 5,
+      subject: UPGRADING_PAGE,
+      message: `${UPGRADING_PAGE} ${state}. It is generated: run \`${GENERATE_COMMAND}\` and commit the result; edit retirements.json, never the page.`,
+    },
+  ];
+}
+
+/** Checks 1 to 5 over planted or scanned input; pure. */
 export function runRetirementChecks(input: RetirementCheckInput): RetirementCheckResult {
   const expiry = expiryOutcomes(input.entries, {
     today: input.today,
@@ -226,6 +290,8 @@ export function runRetirementChecks(input: RetirementCheckInput): RetirementChec
     failures: [
       ...checkSites(input.entries, input.sites),
       ...checkDrivers(input.entries, input.driverIds),
+      ...checkDocPatterns(input.entries, input.texts),
+      ...checkUpgradingPage(input.expectedPage, input.upgradingPage),
       ...expiry.failures.map(asFinding),
     ],
     warnings: expiry.warnings.map(asFinding),
@@ -250,6 +316,19 @@ export function scanRefusalSites(repoRoot = REPO_ROOT): RetirementSite[] {
       findRetirementSites(path.relative(repoRoot, file), readFileSync(file, 'utf8'))
     )
   );
+}
+
+function readUpgradingPage(): string | null {
+  const file = path.join(REPO_ROOT, UPGRADING_PAGE);
+  return existsSync(file) ? readFileSync(file, 'utf8') : null;
+}
+
+/** Every user-facing file under the shared scope, read; an empty scan is a broken scan. */
+export function scanUserFacingText(repoRoot = REPO_ROOT): ScannedText[] {
+  return listUserFacingFiles(repoRoot).map((entry) => ({
+    file: entry.file,
+    lines: readUserFacingLines(repoRoot, entry),
+  }));
 }
 
 function readPackageVersion(): string {
@@ -289,9 +368,20 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
+  const texts = scanUserFacingText();
+  if (texts.length === 0) {
+    console.error(
+      `❌ ${GATE}: the user-facing scope resolved to no tracked file; the scan is broken.`
+    );
+    process.exitCode = 1;
+    return;
+  }
   const { failures, warnings } = runRetirementChecks({
     entries,
     sites,
+    texts,
+    expectedPage: renderUpgradingPage(entries),
+    upgradingPage: readUpgradingPage(),
     driverIds: findDriverIds(readFileSync(path.join(REPO_ROOT, DRIVER_FILE), 'utf8')),
     today: isoToday(),
     packageVersion: readPackageVersion(),
@@ -303,7 +393,7 @@ function main(): void {
     return;
   }
   console.log(
-    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s), ${warnings.length} past its date`
+    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page current, ${warnings.length} past its date`
   );
 }
 
