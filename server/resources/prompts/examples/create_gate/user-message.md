@@ -1,6 +1,15 @@
 # Gate Authoring
 
-{% if tool_gate_builder %}
+{% if tool_gate_builder and not tool_gate_builder.valid %}
+
+## Refused
+
+Nothing was prepared.
+
+{% for error in tool_gate_builder.errors %}- {{ error }}
+{% endfor %}
+Send the call again with the names above.
+{% elif tool_gate_builder %}
 
 ## Prepared draft
 
@@ -22,7 +31,7 @@ Design a gate for:
 1. Inspect a related registered gate using `resource_manager(resource_type:"gate", action:"inspect", id:<reference>)` and use the current contract for supported shapes.
 2. Prepare a canonical create payload with id, name, description, guidance, `type` (validation or guidance), and `gate_type` (framework, category, or custom). These two fields describe different concerns.
 3. Choose supported `pass_criteria`: `inline_guidance` describes criteria for the client; `framework_compliance` targets framework compliance. `shell_verify` runs its `shell_command` and judges exit status, under the operator's command/directory allowlists. `script_tool` runs a registered script with `script_tool_id` and optional input/timeout/working directory. A declarative criterion does not itself run tests or inspect files.
-4. Configure applicable activation, subject, severity, `enforcement_mode`, `block_response_on_fail`, `retry_config`, and evaluation settings. Choose self review or a configured judge through `evaluation`; do not invent criterion fields such as keyword/file-presence checks. Legacy `enforcementMode` is accepted by the adapter and emitted as `enforcement_mode`.
+4. Configure applicable activation, subject, severity, `enforcement_mode`, `block_response_on_fail`, `retry_config`, and evaluation settings. Choose self review or a configured judge through `evaluation`; do not invent criterion fields such as keyword/file-presence checks.
 5. Present the complete non-executing create draft and resolve outstanding choices. Gate creation has no `validate` action and no `preview_action:"create"`; do not invent a preview or claim local schema checks prove resource validity.
 6. Create when authorized and read the server result. Inspect the resulting gate and verify the receipt, then smoke-test attachment with `prompt_engine(command:">>your_prompt", gates:[<gate_id>])` when that execution is in scope.
 

@@ -258,6 +258,13 @@ one is a breaking change and ships in a major release. The steps:
    `docs/reference/upgrading.md`, the one page where a user reads the old name, and
    `server/src/shared/utils/_generated/retirement-notices.ts`, the projection the product reads.
 
+A refusal that cannot read the projection, because it lives in a shipped resource script or a
+hook, is declared on its entry instead: `refusalSites` lists each tracked file that holds the
+refusal and a `marker`, one line of text the file holds there. Such an entry gets no projection
+member, so its message writes the `refusedIn` release itself and its driver checks that it does.
+The gate fails a declared file that is not tracked or no longer holds its marker, and
+`retirements:list` prints the declared files as the entry's sites.
+
 `npm run validate:retirements` (inside `validate:all`) fails an entry with no refusal site or no
 driver, a read of the projection naming no entry, a user-facing line matching a `docPattern`, and
 an upgrade page or projection that differs from what the ledger renders. It also fails wording

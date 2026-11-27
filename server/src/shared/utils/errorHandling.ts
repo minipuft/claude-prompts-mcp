@@ -120,29 +120,13 @@ export class ArgumentError extends BaseError {
 
 export class ValidationError extends BaseError {
   public readonly validationResult?: ErrorValidationResult;
-  public readonly validationErrors?: string[]; // Keep for backwards compatibility
 
   constructor(
     message: string,
-    validationErrorsOrContext?: string[] | ErrorContext,
+    context: ErrorContext = {},
     validationResult?: ErrorValidationResult
   ) {
-    // Handle backwards compatibility with old constructor signature
-    let context: ErrorContext = {};
-    let validationErrors: string[] | undefined;
-
-    if (Array.isArray(validationErrorsOrContext)) {
-      // Old signature: (message, validationErrors)
-      validationErrors = validationErrorsOrContext;
-    } else if (validationErrorsOrContext) {
-      // New signature: (message, context, validationResult)
-      context = validationErrorsOrContext;
-    }
-
     super(message, 'VALIDATION_ERROR', context);
-    if (validationErrors !== undefined) {
-      this.validationErrors = validationErrors;
-    }
     if (validationResult !== undefined) {
       this.validationResult = validationResult;
     }
@@ -173,11 +157,6 @@ export class ValidationError extends BaseError {
           message += `   💡 ${warning.suggestion}\n`;
         }
       });
-    }
-
-    // Backwards compatibility with old validationErrors array
-    if (this.validationErrors && this.validationErrors.length > 0) {
-      message += `\n**Legacy Validation Errors**: ${this.validationErrors.join(', ')}\n`;
     }
 
     return message;
@@ -370,8 +349,7 @@ export function handleError(
     return { message: error.message, isError: false };
   } else if (error instanceof ValidationError) {
     logger.warn(`${context}: ${error.message}`);
-    const errors = error.validationErrors ? `: ${error.validationErrors.join(', ')}` : '';
-    return { message: `${error.message}${errors}`, isError: false };
+    return { message: error.message, isError: false };
   } else {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error(`${context}: ${errorMessage}`);

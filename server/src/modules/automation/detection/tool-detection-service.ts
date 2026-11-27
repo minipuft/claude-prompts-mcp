@@ -223,7 +223,7 @@ export class ToolDetectionService implements ToolDetectionServicePort {
 
     // Map each schema property to user args (findArgValue already filters empty placeholders)
     for (const [propName, propSchema] of Object.entries(schema.properties)) {
-      const value = this.findArgValue(args, propName, propSchema);
+      const value = this.findArgValue(args, propName, propSchema, schema.properties);
       if (value !== undefined) {
         inputs[propName] = value;
       }
@@ -241,7 +241,8 @@ export class ToolDetectionService implements ToolDetectionServicePort {
   private findArgValue(
     args: Record<string, unknown>,
     propName: string,
-    propSchema?: JSONSchemaDefinition
+    propSchema?: JSONSchemaDefinition,
+    declaredProperties?: Record<string, unknown>
   ): unknown {
     // Direct match
     if (propName in args) {
@@ -256,6 +257,11 @@ export class ToolDetectionService implements ToolDetectionServicePort {
     // Try common variations
     const variations = this.getNameVariations(propName);
     for (const variant of variations) {
+      // A spelling the schema declares as its own property is a different input: filling this
+      // property from it would hand a tool both spellings whichever one the caller sent.
+      if (declaredProperties !== undefined && variant in declaredProperties) {
+        continue;
+      }
       if (variant in args) {
         const value = args[variant];
         if (this.isEmptyPlaceholder(value)) {
@@ -362,7 +368,12 @@ export class ToolDetectionService implements ToolDetectionServicePort {
     const missingParams: string[] = [];
 
     for (const reqField of required) {
-      const value = this.findArgValue(args, reqField, schema.properties[reqField]);
+      const value = this.findArgValue(
+        args,
+        reqField,
+        schema.properties[reqField],
+        schema.properties
+      );
       if (value !== undefined) {
         matchedParams.push(reqField);
       } else {

@@ -237,12 +237,12 @@ character, not a literal backslash**:
 
 **Double any backslash you mean literally** — Windows paths and regexes are the common cases.
 
-This applies only to values typed into `command`. Values passed through `inputs` or `options`
-bypass the command grammar and retain their original JSON types, so paths, regular expressions,
-nested objects, and arrays arrive exactly as sent. Use `inputs` for prompt arguments; `options` is
-the legacy/execution-hint channel. Resolution precedence is: explicit inline argument → `inputs`
-→ `options` → prompt default. On a `-->` chain command they apply to the first segment's prompt;
-later segments take their arguments from the command text and the previous step's output.
+This applies only to values typed into `command`. Values passed through `inputs` bypass the
+command grammar and retain their original JSON types, so paths, regular expressions, nested
+objects, and arrays arrive exactly as sent. `options` carries execution hints, not prompt
+arguments. Resolution precedence is: explicit inline argument → `inputs` → prompt default. On a
+`-->` chain command `inputs` apply to the first segment's prompt; later segments take their
+arguments from the command text and the previous step's output.
 
 ### Operators Quick Reference
 
@@ -356,7 +356,7 @@ prompt_engine(command:"%judge analysis_report")
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                                                         |
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                                                      |
 | `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                                                             |
-| `options`       | object  | Legacy prompt values and execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                                                 |
+| `options`       | object  | Execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                                                                          |
 | `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                                                    |
 | `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                                                          |
 | `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                                                   |
@@ -781,10 +781,8 @@ creation. Existing prompts use `inspect(detail:"full") → preview(preview_actio
 with the inspected `expected_version`; this maintenance preview is separate from new-resource
 validation.
 
-Builders expose current canonical creation fields and preserve nested definitions. The prompt
-builder also accepts `systemMessage`, `userMessageTemplate`, `gateConfiguration`, `chainSteps`,
-and `registerWithMcp`; the gate builder accepts `enforcementMode`. Canonical snake_case inputs
-take precedence when both forms are supplied. Framework type and version are server-derived.
+Builders expose current canonical creation fields and preserve nested definitions. Framework type
+and version are server-derived.
 
 ### Reusable Workflow Authoring
 

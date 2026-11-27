@@ -1,9 +1,10 @@
 /**
  * One driver per retirement ledger entry: each feeds the retired spelling to the boundary that
  * refuses it (the path resolver, the config loader, the transport router, the gate schema, the
- * `prompt_engine` input schema) and returns the text a user reads. The table iterates the ledger,
- * so an entry added without a driver fails here, and `validate:retirements` (check 2) reads the
- * keys of `DRIVERS` to report the same gap without running Jest.
+ * `prompt_engine` input schema, the shipped `create_prompt` and `create_gate` builder scripts) and
+ * returns the text a user reads. The table iterates the ledger, so an entry added without a driver
+ * fails here, and `validate:retirements` (check 2) reads the keys of `DRIVERS` to report the same
+ * gap without running Jest.
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -18,7 +19,8 @@ import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-e
 import { ScriptToolDefinitionLoader } from '../../../src/modules/automation/core/script-definition-loader.js';
 import { runSkillsSyncCommand } from '../../../src/modules/skills-sync/service.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
-import { listRetirements } from '../../../scripts/lib/retirement-ledger.js';
+import { listRetirements, type RetirementEntry } from '../../../scripts/lib/retirement-ledger.js';
+import { bundledScriptTools, runTool } from '../../../scripts/validate-authoring-contracts.js';
 import { withResourceLocations } from '../../helpers/resource-locations.js';
 
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';
@@ -30,7 +32,35 @@ const PRE_5_SHIPPED_CONFIG = new URL(
 );
 
 /** Returns the refusal text the boundary produced for the retired spelling. */
-type Driver = (scratch: string) => Promise<string> | string;
+type Driver = (scratch: string, entry: RetirementEntry) => Promise<string> | string;
+
+/** Names an entry marks as code: camelCase ones in `retired`, snake_case in `replacement`. */
+const CODE_CAMEL_CASE = /`([a-z]+(?:[A-Z][a-z0-9]*)+)`/g;
+const CODE_SNAKE_CASE = /`([a-z0-9]+(?:_[a-z0-9]+)+)`/g;
+
+function codeNames(text: string, pattern: RegExp): string[] {
+  const names = [...text.matchAll(pattern)].map((match) => match[1] as string);
+  if (names.length === 0) throw new Error(`no name marked as code in: ${text}`);
+  return names;
+}
+
+/**
+ * Feeds every camelCase argument the entry retires to the shipped builder script, the way the
+ * server runs it, and returns its refusal lines; throws if it built a call or left a name unnamed.
+ */
+function builderRefusal(toolId: string, entry: RetirementEntry): string {
+  const tool = bundledScriptTools().find((candidate) => candidate.id === toolId);
+  if (tool === undefined) throw new Error(`no shipped builder ${toolId}`);
+  const names = codeNames(entry.retired, CODE_CAMEL_CASE);
+  const output = runTool(tool, Object.fromEntries(names.map((name) => [name, 'probe'])));
+  if (output.valid !== false || output.auto_execute !== undefined || output.draft !== undefined) {
+    throw new Error(`${toolId} accepted a retired argument instead of refusing it`);
+  }
+  const errors = output.errors ?? [];
+  const unnamed = names.filter((name) => !errors.some((line) => line.includes(`'${name}'`)));
+  if (unnamed.length > 0) throw new Error(`the refusal does not name ${unnamed.join(', ')}`);
+  return errors.join('\n');
+}
 
 /** The `prompt_engine` command parser both transports reach, knowing one framework, `CAGEERF`. */
 function commandParser(): UnifiedCommandParser {
@@ -249,6 +279,9 @@ const DRIVERS: Readonly<Record<string, Driver>> = {
     rejectedMessage(() => commandParser().parseCommand('@CAGEERF >>demo', [demoPrompt()])),
   'command-gate-equals-operator': () =>
     rejectedMessage(() => commandParser().parseCommand('>>demo = "cite sources"', [demoPrompt()])),
+  'create-prompt-camel-case-arguments': (_scratch, entry) =>
+    builderRefusal('prompt_builder', entry),
+  'create-gate-camel-case-argument': (_scratch, entry) => builderRefusal('gate_builder', entry),
 };
 
 let warnSpy: jest.SpiedFunction<typeof console.warn>;
@@ -271,9 +304,17 @@ describe('every retired spelling is refused at its boundary with its ledger text
     if (driver === undefined) {
       throw new Error(`retirements.json entry '${id}' has no driver in DRIVERS`);
     }
-    const refusal = await driver(scratch);
+    const refusal = await driver(scratch, entry);
 
-    expect(refusal).toContain(entry.replacement);
+    if (entry.refusalSites === undefined) {
+      expect(refusal).toContain(entry.replacement);
+    } else {
+      // Refused outside TypeScript, the message cannot read the entry's text: it names each
+      // argument the replacement lists.
+      for (const name of codeNames(entry.replacement, CODE_SNAKE_CASE)) {
+        expect(refusal).toContain(`'${name}'`);
+      }
+    }
     expect(refusal).toContain(entry.refusedIn);
   });
 

@@ -19,7 +19,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { listRetirements, type RetirementEntry } from './lib/retirement-ledger.js';
-import { renderRetirementProjection, RETIREMENT_PROJECTION } from './lib/retirement-projection.js';
+import {
+  isProjected,
+  renderRetirementProjection,
+  RETIREMENT_PROJECTION,
+} from './lib/retirement-projection.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -35,7 +39,10 @@ const OPENING =
 const CLOSING =
   'A spelling is in one of two states: accepted, or refused. A refusal is removed after the date in the last column, and from then on the old spelling is unknown input, treated like any other name the product does not recognise.';
 
-/** Kinds whose retired spelling is a literal a user types, shown as code; the rest are phrases. */
+/**
+ * Kinds whose retired spelling is a literal a user types, shown as code; the rest are phrases,
+ * which mark their own names as code (a `prompt-argument` entry names the prompt and each argument).
+ */
 const LITERAL_KINDS: ReadonlySet<RetirementEntry['kind']> = new Set([
   'environment-variable',
   'config-key',
@@ -139,8 +146,9 @@ function main(): void {
     renderRetirementProjection(entries),
     'utf8'
   );
+  const projected = entries.filter(isProjected).length;
   console.log(
-    `✓ Wrote ${UPGRADING_PAGE} and server/${RETIREMENT_PROJECTION} (${entries.length} entries)`
+    `✓ Wrote ${UPGRADING_PAGE} (${entries.length} entries) and server/${RETIREMENT_PROJECTION} (${projected} refused in TypeScript)`
   );
 }
 

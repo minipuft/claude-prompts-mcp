@@ -528,7 +528,6 @@ def _format_expanded_message(
 
 def format_directive(
     command: str,
-    parsed_args: dict[str, str],
     required_args: list[str],
     operators: dict[str, list[str]],
     arguments: dict[str, str] | None = None,
@@ -543,8 +542,7 @@ def format_directive(
     Design: ~40 tokens base, scales with params. One blocking instruction.
 
     Args:
-        command: The full command string
-        parsed_args: Parsed arguments from message
+        command: The full command string; the server reads inline `key:"value"` arguments from it
         required_args: Required args not yet provided
         operators: Detected operators dict
         arguments: Prompt arguments with types (from format_arguments)
@@ -555,15 +553,12 @@ def format_directive(
     """
     lines = ["<CALL-TOOL>"]
 
-    # Build compact param line: prompt_engine | command:"..." | gates:[...] | options:{...}
+    # Build compact param line: prompt_engine | command:"..." | gates:[...]
     parts = ["prompt_engine"]
     parts.append(f'command:"{command}"')
 
     if operators.get("gate"):
         parts.append(f"gates:{json.dumps(operators['gate'])}")
-
-    if parsed_args:
-        parts.append(f"options:{json.dumps(parsed_args)}")
 
     lines.append(" | ".join(parts))
 
@@ -687,7 +682,7 @@ def main():
         # Pass prompt_info for chain workflow visibility
         expanded = is_expanded_output()
         system_message = format_user_message(command, parsed_args, operators, arguments, expanded, prompt_info)
-        directive = format_directive(command, parsed_args, required_args, operators, arguments, prompt_info)
+        directive = format_directive(command, required_args, operators, arguments, prompt_info)
 
         # `additionalContext` carries the resolution line on every host, because
         # it is injected into the conversation rather than carried as a hook

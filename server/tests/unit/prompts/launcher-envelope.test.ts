@@ -31,11 +31,11 @@ describe('buildLauncherMessages', () => {
     expect(textOf(messages)).toContain('prompt_engine(command: ">>hiring_manager_code_eval")');
   });
 
-  test('serializes provided args into the options channel', () => {
+  test('serializes provided args into the inputs channel', () => {
     const messages = buildLauncherMessages(makePrompt(), { code: 'function f(){}', lang: 'js' });
 
     expect(textOf(messages)).toContain(
-      'prompt_engine(command: ">>hiring_manager_code_eval", options: {"code":"function f(){}","lang":"js"})'
+      'prompt_engine(command: ">>hiring_manager_code_eval", inputs: {"code":"function f(){}","lang":"js"})'
     );
   });
 

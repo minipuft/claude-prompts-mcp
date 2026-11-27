@@ -54,9 +54,9 @@ function gateHeading(prompt: ConvertedPrompt): string {
     : 'Quality gates that will be enforced:';
 }
 
-/** Serialize provided slash-command args into the prompt_engine `options` channel. */
-function renderOptionsClause(args: Record<string, unknown>): string {
-  return Object.keys(args).length > 0 ? `, options: ${JSON.stringify(args)}` : '';
+/** Serialize provided slash-command args into the prompt_engine `inputs` channel. */
+function renderInputsClause(args: Record<string, unknown>): string {
+  return Object.keys(args).length > 0 ? `, inputs: ${JSON.stringify(args)}` : '';
 }
 
 /**
@@ -71,7 +71,7 @@ export function buildLauncherMessages(
     'This prompt runs through the execution pipeline (framework, gates, chains, telemetry).',
     'Invoke the `prompt_engine` tool now — do not answer inline:',
     '',
-    `    prompt_engine(command: ">>${prompt.id}"${renderOptionsClause(args)})`,
+    `    prompt_engine(command: ">>${prompt.id}"${renderInputsClause(args)})`,
   ];
 
   const argumentHints = renderArgumentHints(prompt.arguments ?? []);

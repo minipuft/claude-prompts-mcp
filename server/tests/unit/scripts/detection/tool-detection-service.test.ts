@@ -93,6 +93,34 @@ describe('ToolDetectionService', () => {
       });
       expect(service.extractInputs({ chain_steps: [] }, tool)).toEqual({ chainSteps: [] });
     });
+
+    describe('a schema that declares both spellings of a name', () => {
+      const tool = createMockTool({
+        inputSchema: {
+          type: 'object',
+          properties: { system_message: { type: 'string' }, systemMessage: { type: 'string' } },
+        },
+      });
+
+      it('hands the tool only the spelling the caller sent: snake_case', () => {
+        expect(service.extractInputs({ system_message: 'x' }, tool)).toEqual({
+          system_message: 'x',
+        });
+      });
+
+      it('hands the tool only the spelling the caller sent: camelCase', () => {
+        expect(service.extractInputs({ systemMessage: 'x' }, tool)).toEqual({
+          systemMessage: 'x',
+        });
+      });
+
+      it('keeps both when the caller sent both', () => {
+        expect(service.extractInputs({ system_message: 'a', systemMessage: 'b' }, tool)).toEqual({
+          system_message: 'a',
+          systemMessage: 'b',
+        });
+      });
+    });
   });
 
   describe('detectTools', () => {

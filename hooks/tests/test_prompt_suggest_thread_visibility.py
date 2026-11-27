@@ -159,6 +159,35 @@ class TestHitPathReachesTheThread:
         assert ctx.rstrip().endswith("</CALL-TOOL>")
         assert ctx.index("[>> prompt_engine]") < ctx.index("<CALL-TOOL>")
 
+    @pytest.mark.parametrize(
+        ("message", "param_line"),
+        [
+            (
+                '>>demo_prompt content:"hello world" scope:"global"',
+                'prompt_engine | command:">>demo_prompt content:"hello world" scope:"global""',
+            ),
+            (">>demo_prompt", 'prompt_engine | command:">>demo_prompt"'),
+            (
+                '>>demo_prompt content:"x" :: "be concise"',
+                'prompt_engine | command:">>demo_prompt content:"x" :: "be concise"" | gates:["be concise"]',
+            ),
+            (
+                '>>demo_chain content:"x"',
+                'prompt_engine | command:">>demo_chain content:"x""',
+            ),
+        ],
+    )
+    def test_directive_names_the_command_and_no_argument_channel(
+        self, stub_cache, monkeypatch, capsys, message, param_line
+    ):
+        """Inline `key:"value"` pairs travel in `command`, which the server parses; the
+        directive repeats none of them in `options` or `inputs`."""
+        code, out = run_hook(monkeypatch, capsys, message)
+        directive = context_of(out).split("<CALL-TOOL>", 1)[1]
+        assert directive.splitlines()[1] == param_line
+        assert "options:" not in directive
+        assert "inputs:" not in directive
+
     def test_system_message_channel_is_unchanged(self, stub_cache, monkeypatch, capsys):
         """The fix ADDS a channel; it must not remove the CLI's."""
         code, out = run_hook(monkeypatch, capsys, '>>demo_prompt content:"x"')

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import {
   creationFields,
   loadAuthoringResources,
+  REFUSED_NAMES,
   runTool,
   semanticAuthoringInput,
   validateAuthoringContracts,
@@ -31,15 +32,34 @@ const FIXTURES = JSON.parse(
   readFileSync(path.join(ROOT, 'tests/unit/resources/bundled-script-tool-fixtures.json'), 'utf8')
 ) as Record<string, { input: Record<string, unknown> }>;
 
+/** The camelCase spellings, flattened with the creation type that owns each. */
+const REFUSED = (['prompt', 'gate'] as const).flatMap((type) =>
+  Object.entries(REFUSED_NAMES[type]).map(([name, canonical]) => ({ type, name, canonical }))
+);
+
 function resources(): AuthoringResource[] {
   return (['prompt', 'gate', 'framework'] as const).map((type) => ({
     type,
     tool: { id: `${type}_builder`, dir: '', promptDir: '', runtime: 'python', script: 'script.py' },
-    schema: { type: 'object', properties: structuredClone(FIELDS[type]) },
-    arguments: Object.entries(FIELDS[type]).map(([name, field]) => ({
-      name,
-      type: String(field.type),
-    })),
+    schema: {
+      type: 'object',
+      properties: {
+        ...structuredClone(FIELDS[type]),
+        ...Object.fromEntries(
+          Object.entries(REFUSED_NAMES[type]).map(([name, canonical]) => [
+            name,
+            structuredClone(FIELDS[type][canonical]),
+          ])
+        ),
+      },
+    },
+    arguments: [
+      ...Object.entries(FIELDS[type]).map(([name, field]) => ({ name, type: String(field.type) })),
+      ...Object.entries(REFUSED_NAMES[type]).map(([name, canonical]) => ({
+        name,
+        type: String(FIELDS[type][canonical]!.type),
+      })),
+    ],
     input:
       type === 'gate'
         ? semanticAuthoringInput(structuredClone(FIXTURES[`${type}_builder`]!.input))
@@ -50,6 +70,16 @@ function resources(): AuthoringResource[] {
 /** A projection control, deliberately not a substitute for the actual-builder cases below. */
 function project(tool: ToolOnDisk, input: Record<string, unknown>): ScriptOutput {
   const type = tool.id.replace('_builder', '') as AuthoringResource['type'];
+  const refused = Object.entries(REFUSED_NAMES[type]).filter(([name]) => name in input);
+  if (refused.length > 0) {
+    return {
+      valid: false,
+      errors: refused.map(
+        ([name, canonical]) =>
+          `'${name}' is not an argument of create_${type} (retired in 6.0.0); send '${canonical}'.`
+      ),
+    };
+  }
   const params = {
     resource_type: type,
     action: type === 'prompt' ? 'validate' : 'create',
@@ -302,16 +332,98 @@ describe('creation authoring contract drift guard', () => {
     );
   });
 
-  it('detects a legacy alias overwriting an explicit canonical value', () => {
-    const errors = validateAuthoringContracts(loadAuthoringResources(), FIELDS, (tool, input) => {
-      const output = runTool(tool, input);
-      if (Object.hasOwn(input, 'registerWithMcp') && Object.hasOwn(input, 'register_with_mcp')) {
-        params(output)['register_with_mcp'] = input['registerWithMcp'];
+  describe('camelCase spellings are refused by the actual builders', () => {
+    const builderFor = (type: 'prompt' | 'gate') =>
+      loadAuthoringResources().find((resource) => resource.type === type)!;
+
+    it.each(REFUSED)(
+      '$type builder refuses $name and names $canonical',
+      ({ type, name, canonical }) => {
+        const resource = builderFor(type);
+        const input = { ...resource.input, [name]: resource.input[canonical] };
+        delete input[canonical];
+        const output = runTool(resource.tool, input);
+        expect(output.valid).toBe(false);
+        expect(output.auto_execute).toBeUndefined();
+        expect(output.draft).toBeUndefined();
+        expect(output.errors).toEqual([
+          `'${name}' is not an argument of create_${type} (retired in 6.0.0); send '${canonical}'.`,
+        ]);
       }
-      return output;
+    );
+
+    it.each(REFUSED)(
+      '$type builder refuses $name even beside $canonical',
+      ({ type, name, canonical }) => {
+        const resource = builderFor(type);
+        const output = runTool(resource.tool, {
+          ...resource.input,
+          [name]: resource.input[canonical],
+        });
+        expect(output.valid).toBe(false);
+        expect(output.errors).toHaveLength(1);
+      }
+    );
+
+    it.each(REFUSED)('$type builder builds from $canonical', ({ type, name, canonical }) => {
+      const resource = builderFor(type);
+      const output = runTool(resource.tool, resource.input);
+      expect(output.valid).toBe(true);
+      expect(params(output)[canonical]).toEqual(resource.input[canonical]);
+      expect(Object.keys(params(output))).not.toContain(name);
+    });
+
+    it('names every camelCase spelling received, one line each', () => {
+      const resource = builderFor('prompt');
+      const output = runTool(resource.tool, {
+        ...resource.input,
+        systemMessage: 'x',
+        chainSteps: [],
+      });
+      expect(output.errors).toEqual([
+        "'systemMessage' is not an argument of create_prompt (retired in 6.0.0); send 'system_message'.",
+        "'chainSteps' is not an argument of create_prompt (retired in 6.0.0); send 'chain_steps'.",
+      ]);
+    });
+
+    it('declares each refused name where the input has to travel to reach the builder', () => {
+      for (const { type, name } of REFUSED) {
+        const resource = builderFor(type);
+        expect(Object.keys(resource.schema.properties ?? {})).toContain(name);
+        expect(resource.arguments.map((entry) => entry.name)).toContain(name);
+      }
+    });
+  });
+
+  it.each(REFUSED)('detects a builder that accepts $name', ({ type, name, canonical }) => {
+    const errors = check(resources(), FIELDS, (tool, input) => {
+      const copy = { ...input };
+      if (name in copy) {
+        copy[canonical] = copy[name];
+        delete copy[name];
+      }
+      return project(tool, copy);
     });
     expect(errors).toContain(
-      'create_prompt/prompt_builder/register_with_mcp: adapter lost or changed mapped value for register_with_mcp'
+      `create_${type}/${type}_builder/${name}: builder did not refuse the name`
+    );
+  });
+
+  it('detects a builder that refuses without naming the canonical spelling', () => {
+    const errors = check(resources(), FIELDS, (tool, input) => {
+      const output = project(tool, input);
+      return output.valid === false ? { valid: false, errors: ['refused'] } : output;
+    });
+    expect(errors).toContain(
+      "create_prompt/prompt_builder/systemMessage: refusal must be one line naming 'systemMessage' and 'system_message'"
+    );
+  });
+
+  it('detects a refused name that is no longer declared in the builder schema', () => {
+    const items = resources();
+    delete items[0]!.schema.properties!['systemMessage'];
+    expect(check(items)).toContain(
+      'create_prompt/prompt_builder/systemMessage: refused name must be declared in the builder schema and the prompt'
     );
   });
 

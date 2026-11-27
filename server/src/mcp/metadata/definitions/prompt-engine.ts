@@ -47,7 +47,7 @@ const generatedParameters = contractToParameterDescriptors<RequestField>(promptE
   }
 ) satisfies ParameterDescriptor<RequestField>[];
 
-// Parameters from contracts plus any manually tracked deprecated params
+// Parameters derived from the tool contract
 const parameterDescriptors: ParameterDescriptor<RequestField>[] = [...generatedParameters];
 
 const commandDescriptors: CommandDescriptor[] = [

@@ -240,7 +240,11 @@ It compares those fields with each builder's `schema.json` and registered `promp
 arguments, then runs the actual bundled scripts and checks that inputs survive mapping. Each base
 draft also passes the exported canonical transport schema, so nested shape changes fail through
 the schema owner. Probes include false, zero, empty values accepted by the transport, supported
-enum values, nested chain fields, and legacy aliases with canonical precedence. Missing or obsolete fields, type drift,
+enum values, nested chain fields, and each camelCase spelling a builder refuses (alone and beside
+its snake_case name, answered with one line naming the name to send). A refused spelling stays
+declared in the builder schema and the registered prompt: a prompt drops an undeclared argument
+without a word, and a script tool receives a name its schema does not declare already renamed to
+the declared one. Missing or obsolete fields, type drift,
 lost mappings, wrong emitted parameters/actions, and premature automatic creation fail with the
 prompt, builder, and parameter named. Nested domain validation stays with `resource_manager`;
 the check does not validate authoring prose or prove a resource is domain-valid.

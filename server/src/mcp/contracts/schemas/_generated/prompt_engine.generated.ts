@@ -3,7 +3,7 @@ interface ToolParameter {
   name: string;
   type: string;
   description: string;
-  status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental';
+  status: 'working' | 'needs-validation' | 'hidden' | 'experimental';
   required?: boolean;
   default?: unknown;
   examples?: string[];
@@ -17,7 +17,7 @@ interface ToolCommand {
   id: string;
   summary: string;
   parameters?: string[];
-  status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental'; // Required with default value
+  status: 'working' | 'needs-validation' | 'hidden' | 'experimental'; // Required with default value
   notes?: string[];
 }
 
@@ -152,14 +152,14 @@ export const prompt_engineParameters: ToolParameter[] = [
     name: 'options',
     type: 'record',
     description:
-      'Legacy prompt argument/options map. Values remain typed; inline command arguments take precedence. Prefer `inputs` for prompt arguments, especially arrays and objects.',
+      'Execution hints. Carries `client_profile` ({clientFamily, clientId, clientVersion, delegationProfile}) when transport metadata is unavailable. Prompt arguments go in `inputs`.',
     status: 'working',
   },
   {
     name: 'inputs',
     type: 'record',
     description:
-      "Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default. On a `-->` chain command they apply to the first segment's prompt; later segments take their arguments from the command text and the previous step's output.",
+      "Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > prompt default. On a `-->` chain command they apply to the first segment's prompt; later segments take their arguments from the command text and the previous step's output.",
     status: 'working',
   },
   {

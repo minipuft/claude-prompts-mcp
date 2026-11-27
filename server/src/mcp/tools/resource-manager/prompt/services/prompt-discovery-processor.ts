@@ -615,8 +615,6 @@ export class PromptDiscoveryProcessor {
         return '🗺️ Planned';
       case 'untested':
         return '🧪 Untested';
-      case 'deprecated':
-        return '🛑 Deprecated';
       default:
         return `⚠️ ${action.status}`;
     }

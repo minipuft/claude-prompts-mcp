@@ -2,10 +2,10 @@
 // Do not edit manually — run `npm run generate:retirements-doc`. `npm run validate:retirements`
 // fails when this file and the ledger disagree.
 //
-// The three fields a refusal prints, one constant per ledger entry. A refusal site imports this
-// module as a namespace and reads one member by name, so each bundle keeps only what it reads.
-// The ledger's other fields and its shape check stay with the scripts
-// (scripts/lib/retirement-ledger.ts).
+// The three fields a refusal prints, one constant per ledger entry refused in TypeScript. A
+// refusal site imports this module as a namespace and reads one member by name, so each bundle
+// keeps only what it reads. The ledger's other fields, its entries refused outside TypeScript and
+// its shape check stay with the scripts (scripts/lib/retirement-ledger.ts).
 
 import type { RetirementNotice } from '../retirement-notice.js';
 

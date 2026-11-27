@@ -10,7 +10,6 @@ export type LifecycleStatus =
   | 'needs-visuals'
   | 'planned'
   | 'untested'
-  | 'deprecated'
   | 'hidden'
   | 'experimental';
 

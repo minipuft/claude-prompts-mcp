@@ -66,8 +66,6 @@ export class GuideActionHandler extends ActionHandler {
         return '🗺️ Planned';
       case 'untested':
         return '🧪 Untested';
-      case 'deprecated':
-        return '🛑 Deprecated';
       default:
         return `⚠️ ${status}`;
     }

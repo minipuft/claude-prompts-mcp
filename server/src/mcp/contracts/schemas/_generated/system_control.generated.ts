@@ -3,7 +3,7 @@ interface ToolParameter {
   name: string;
   type: string;
   description: string;
-  status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental';
+  status: 'working' | 'needs-validation' | 'hidden' | 'experimental';
   required?: boolean;
   default?: unknown;
   examples?: string[];
@@ -17,7 +17,7 @@ interface ToolCommand {
   id: string;
   summary: string;
   parameters?: string[];
-  status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental'; // Required with default value
+  status: 'working' | 'needs-validation' | 'hidden' | 'experimental'; // Required with default value
   notes?: string[];
 }
 
