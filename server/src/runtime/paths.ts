@@ -37,6 +37,7 @@ import {
   type PathSetting,
 } from '#shared/utils/path-setting.js';
 import { deriveProjectDir } from '#shared/utils/project-scope.js';
+import { retirementNotice } from '#shared/utils/retirement-notice.js';
 import {
   RUNTIME_STATE_DIR_NAME,
   STATE_DB_FILE_NAME,
@@ -369,10 +370,11 @@ export class PathResolver {
   assertUsablePathSettings(): void {
     const removedResourcesPath = process.env['MCP_RESOURCES_PATH'];
     if (removedResourcesPath !== undefined && removedResourcesPath !== '') {
+      const notice = retirementNotice('env-mcp-resources-path');
       throw new PathSettingError(
         [
-          'Refusing to start: MCP_RESOURCES_PATH is no longer read.',
-          "Expected MCP_WORKSPACE set to a profile folder that holds resources/ (move the <type>/ folders under it), or the folder listed in paths.resources of the profile's config.jsonc.",
+          `Refusing to start: ${notice.retired} is no longer read (retired in ${notice.refusedIn}).`,
+          `Expected ${notice.replacement}.`,
         ].join('\n')
       );
     }

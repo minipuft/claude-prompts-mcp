@@ -2523,10 +2523,9 @@ profile folder instead. The full parsed set (17, from `server/src/runtime/cli.ts
 | Streamable HTTP | `--transport=streamable-http` | Web dashboards, remote APIs            |
 | Dual mode       | `--transport=both`            | STDIO + Streamable HTTP simultaneously |
 
-`--transport=sse` was removed with the SDK v2 upgrade and now **exits with an error** naming
-`streamable-http`. It does not fall back to another transport: a removed option that silently
-resolved to something else started the server on a transport nobody asked for and reported
-success. The same check applies to `transport` in your config file.
+A `--transport` value outside this table **exits with an error** naming the accepted values. It
+never falls back to another transport: a silent fallback would start the server on a transport
+nobody asked for and report success.
 
 ### Environment Variables
 

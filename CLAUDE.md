@@ -140,6 +140,7 @@ mistake was made and reverted on 2026-08-15. Two gates keep the relationship hon
 | Skills Sync                                  | `docs/guides/skills-sync.md`              |
 | Telemetry & observability                    | `docs/guides/telemetry-observability.md`  |
 | Troubleshooting                              | `docs/guides/troubleshooting.md`          |
+| Retired spellings (generated)                | `docs/reference/upgrading.md`             |
 | Contributing & PR process                    | `CONTRIBUTING.md`                         |
 | README charter (root README authoring rules) | `docs/portfolio/readme-charter.md`        |
 | Release highlights                           | `CHANGELOG.md`                            |
@@ -164,6 +165,8 @@ Read the relevant doc before editing. Update docs when behavior changes.
 | `npm run validate:contracts`      | Verify generated artifacts in sync                                                                                                                                               |
 | `npm run validate:domain-ownership` | Check the Domain Ownership Matrix against every module's `owns` declaration, both directions                                                                                    |
 | `npm run validate:tool-parameter-reads` | Fail when a tool command declares a parameter its code never reads, or its code reads a parameter the command does not declare, on all three tools. A read is a property read reaching the handler, processor or pipeline stage — never a name in a string, and never a destructured key that is not used |
+| `npm run validate:retirements`    | Join `retirements.json` to its refusal sites, test drivers, docs and generated page; warn past `forgetAfter` |
+| `npm run retirements:list`        | Print each retired spelling with its dates and refusal sites |
 | `npm run test:integration`        | FIRST for new features                                                                                                                                                           |
 | `npm run test:coverage`           | Baseline coverage (target: >80%)                                                                                                                                                 |
 | `npm run skills:export`           | Export skills from `skills-sync.yaml`                                                                                                                                            |
@@ -300,6 +303,7 @@ together, which `validate:package-entries` enforces.
 - **Guidance owner**: `PromptGuidanceService` remains the central framework-guidance service. Do not introduce a parallel coordinator/orchestrator with overlapping responsibility.
 - **Framework validity**: Always `frameworkManager.getFramework(id)` -- never hardcode framework lists.
 - **Consolidation over addition**: Enhance existing systems vs creating new ones.
+- **Retired spellings**: a retired spelling is refused, never accepted with a note. It has one entry in `tooling/contracts/registries/retirements.json`; its refusal site calls `retirementNotice(id)`; `validate:retirements` joins the two. Guides never name it: only the generated `docs/reference/upgrading.md` does. -> `CONTRIBUTING.md` §Retiring a Spelling
 - **Pipeline state**: Use `context.gates`, `context.frameworkAuthority`, `context.diagnostics` -- never mutate arrays directly.
 - **Module organization**: import the defining module directly. Banned is the compat re-export shim -- a file whose whole body is `export ... from` AND which carries a back-compat marker, giving a symbol a second import path `rg` misses (ESLint `claude/no-compat-reexport-shim`). A markerless barrel is not banned (~60 exist) but prefer direct imports: `validate:arch` expresses layer and cycle boundaries as paths, and a barrel spanning layers launders the real edge. Dead barrels are found by `npx knip`, not `validate:arch`. Use `internal/` for a genuinely private region.
 - **Concurrent sessions**: work in a linked worktree created with `npm run worktree:create -- <path> <branch> --from origin/main`, never a second session in this checkout and never Claude Code's `--worktree`/`EnterWorktree` (`CONTRIBUTING.md` §Working in a second worktree records why, including the shared `node_modules` symlinks). Set a distinct `PORT` if two trees run servers.

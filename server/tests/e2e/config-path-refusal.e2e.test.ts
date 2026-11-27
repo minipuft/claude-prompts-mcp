@@ -251,7 +251,9 @@ describe('a path setting that cannot be used refuses startup', () => {
     expect(run.timedOut).toBe(false);
     expect(run.exitCode).toBe(1);
     expect(run.stdout).toBe('');
-    expect(run.stderr).toContain('Refusing to start: MCP_RESOURCES_PATH is no longer read.');
+    expect(run.stderr).toContain(
+      'Refusing to start: MCP_RESOURCES_PATH is no longer read (retired in 6.0.0).'
+    );
     expect(run.stderr).toContain(
       "Expected MCP_WORKSPACE set to a profile folder that holds resources/ (move the <type>/ folders under it), or the folder listed in paths.resources of the profile's config.jsonc."
     );

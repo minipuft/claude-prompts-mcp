@@ -67,10 +67,11 @@ same way for a workspace. The message names both paths. Delete whichever file yo
 | `paths.writeTarget`                                       | `"bundled"`: the package's own resources are never written                                         | Refuses to start; the message names the folders it may name                                  |
 | `paths.writeTarget`                                       | Resolves to neither a listed `paths.resources` entry nor the profile's own `resources/` folder     | Refuses to start; the message names the value, its resolved path and the folders it may name |
 | `paths.writeTarget`                                       | Names a folder that does not exist                                                                 | Refuses to start; create the folder or remove the key                                        |
-| `MCP_RESOURCES_PATH`                                      | Set to any value; the server no longer reads it                                                    | Refuses to start; the message names `MCP_WORKSPACE` and `paths.resources` as the replacement |
-| `prompts.directory`                                       | Any value that does not resolve to the default `resources/prompts` beside the config file          | Refuses to start; the message names `paths.resources`                                        |
 | A workspace with no config file at all                    | n/a                                                                                                | Falls back to the packaged default                                                           |
 | The packaged `config.json`                                | Invalid JSON                                                                                       | Falls back to built-in defaults, logs a warning, does **not** refuse                         |
+
+A name the product no longer accepts is refused the same way; [Upgrading](./upgrading.md) lists
+each one with what to use instead.
 
 The refusal only applies to a setting an operator actually named. The one file that still falls
 back silently on a parse error is the packaged one nobody configured; refusing there would mean a
@@ -127,10 +128,6 @@ either an entry of `paths.resources` or the profile's own `resources/` folder. E
 to `<writeTarget>/<type>/`; with the key unset, writes land in the profile's own folder. The
 refusals are in the table above.
 
-`prompts.directory` is not a key. A file that carries it with the default value
-(`resources/prompts`) loads as if it were absent; any other value is refused at startup with a
-message naming `paths.resources`, where the directory holding that `prompts/` folder belongs.
-
 ## Precedence of a Single Value
 
 Reading down from the built-in default, each layer overrides the one above it, but only for the
@@ -151,10 +148,7 @@ with an environment override, and most keys have no CLI flag. A key with neither
 from the file, or the default if the file doesn't set it.
 
 **Transport is a launch-time-only decision.** `--transport` (`stdio`, `streamable-http`, or
-`both`) is the sole selector. A config file that still sets `server.transport` to anything other
-than `"stdio"` makes the server refuse to start, naming the value it found and the `--transport`
-flag to pass instead. It does not fall back to stdio silently, because that would run the wrong
-transport while telling the operator nothing.
+`both`) is the sole selector; no config key selects a transport.
 
 **What `system_control(action:"config", operation:"get")` reports as a value's `source`** follows
 this same chain, collapsed to three labels: `file` (the config file set it), `default` (the
@@ -277,9 +271,10 @@ that exists wins. See `hooks/README.md` for the hook-specific settings this cove
 ## Upgrading from a Pre-5.0 File
 
 A `config.json` with no `"version"` key is read as a pre-5.0 file and translated in memory on
-load: renamed and moved keys resolve to their new locations, and removed sections (`analysis`,
-`server.transport`) are dropped with a one-time notice naming what changed. Nothing is rewritten on
-disk; the translation happens on every load until you update the file yourself.
+load: renamed and moved keys resolve to their new locations, and removed sections are dropped with
+a one-time notice naming what changed. Nothing is rewritten on disk; the translation happens on
+every load until you update the file yourself. A section the product now refuses is listed on
+[Upgrading](./upgrading.md).
 
 For the full list of what moved, what was removed, and why, see the [CHANGELOG](../../CHANGELOG.md)
 and [CLI Guide § config.jsonc](../guides/cli.md#configjsonc).

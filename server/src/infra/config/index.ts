@@ -69,6 +69,7 @@ import {
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { PathSettingError } from '#shared/utils/path-setting.js';
+import { retirementNotice } from '#shared/utils/retirement-notice.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
 
@@ -604,11 +605,12 @@ function assertServerTransportIsStdio(
   const transportValue = (server as Record<string, unknown>)['transport'];
   if (transportValue === undefined || transportValue === 'stdio') return;
 
+  const notice = retirementNotice('config-server-transport');
   throw new TransportConfigError(
-    `${configPath} sets "server.transport": ${JSON.stringify(transportValue)}, but transport is a ` +
-      'launch-time-only setting — config can no longer select it. Remove ' +
-      '"server.transport" from the config file and launch the server with ' +
-      '--transport=streamable-http (or --transport=both) instead.'
+    `${configPath} sets "${notice.retired}": ${JSON.stringify(transportValue)}, but transport is ` +
+      `a launch-time-only setting — config can no longer select it (retired in ` +
+      `${notice.refusedIn}). Remove "${notice.retired}" from the config file and launch the ` +
+      `server with ${notice.replacement} instead.`
   );
 }
 
@@ -1403,9 +1405,10 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     if (translation.dropped.includes('analysis')) {
       // Names the replacement rather than only the removal: a notice that says "stop doing X"
       // without saying what to do instead reads as breakage.
+      const notice = retirementNotice('config-analysis-section');
       parts.push(
-        'The `analysis` section was removed; for model-graded gate evaluation use the `%judge` ' +
-          'modifier or `gates.evaluation.defaultMode`.'
+        `The \`${notice.retired}\` section was removed in ${notice.refusedIn}; use ` +
+          `${notice.replacement}.`
       );
     }
 

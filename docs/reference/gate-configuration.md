@@ -202,14 +202,12 @@ retry_config:
 | `max_attempts`      | How many times Claude retries before failing.      |
 | `improvement_hints` | Feed validation errors back into the retry prompt. |
 
-### Pattern/length fields are rejected at load
+### Reminders and checks
 
-`required_patterns`, `forbidden_patterns`, `regex_patterns`, `keyword_count`, `min_length`, and
-`max_length` are **not** accepted on a `pass_criteria` entry. None of them ever had a runtime
-evaluator — they used to render into the reminder's guidance text as prose and were never
-evaluated against the agent's actual output, so setting one never made a gate a `check` (see
-[Tiers](#tiers)) even while the schema still accepted it. `validateGateSchema` now refuses a
-criterion carrying any of these six fields, naming the field and the fix.
+A `pass_criteria` entry is either a reminder or a check, and it carries no pattern or length
+fields. A sentence the agent assesses itself against belongs in `guidance` / `guidanceFile`; a
+check that is evaluated is a `shell_verify` or `script_tool` criterion. An entry that carries a
+field outside its type's contract is refused at load, naming the field and the fix.
 
 | If you want this...                                           | Do this instead                                                                                                                                                    |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

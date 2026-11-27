@@ -1,0 +1,76 @@
+{
+  "retirements": [
+    {
+      "id": "env-mcp-resources-path",
+      "kind": "environment-variable",
+      "retired": "MCP_RESOURCES_PATH",
+      "replacement": "MCP_WORKSPACE set to a profile folder that holds resources/ (move the <type>/ folders under it), or the folder listed in paths.resources of the profile's config.jsonc",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "MCP_RESOURCES_PATH"
+    },
+    {
+      "id": "config-prompts-directory",
+      "kind": "config-key",
+      "retired": "prompts.directory",
+      "replacement": "the resources directory that holds its prompts/ folder listed under \"paths.resources\", an ordered list in which \"bundled\" names the package's own resources; or no \"prompts.directory\" at all, which uses the default",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "prompts\\.directory"
+    },
+    {
+      "id": "config-analysis-section",
+      "kind": "config-key",
+      "retired": "analysis",
+      "replacement": "the `%judge` modifier or `gates.evaluation.defaultMode` for model-graded gate evaluation",
+      "refusedIn": "5.0.0",
+      "forgetAfter": "2027-04-06",
+      "docPattern": "\"analysis\"\\s*:|\\banalysis\\.semanticAnalysis\\b"
+    },
+    {
+      "id": "config-server-transport",
+      "kind": "config-key",
+      "retired": "server.transport",
+      "replacement": "the launch flag --transport=streamable-http (or --transport=both)",
+      "refusedIn": "5.0.0",
+      "forgetAfter": "2027-04-06",
+      "docPattern": "server\\.transport"
+    },
+    {
+      "id": "transport-sse",
+      "kind": "transport",
+      "retired": "sse",
+      "replacement": "streamable-http",
+      "refusedIn": "3.2.0",
+      "forgetAfter": "2027-02-07",
+      "docPattern": "--transport[= ]sse\\b|\\bstart:sse\\b"
+    },
+    {
+      "id": "gate-shell-command-string",
+      "kind": "resource-field",
+      "retired": "a bare-string shell_command",
+      "replacement": "a non-empty argv array, e.g. [\"npm\", \"test\"]",
+      "refusedIn": "5.0.0",
+      "forgetAfter": "2027-04-06",
+      "docPattern": "shell_command\"?\\s*:\\s*['\"]"
+    },
+    {
+      "id": "gate-criteria-pattern-fields",
+      "kind": "resource-field",
+      "retired": "pass_criteria pattern and length fields (required_patterns, forbidden_patterns, regex_patterns, keyword_count, min_length, max_length)",
+      "replacement": "guidance.md for the sentence (a reminder), or a shell_verify or script_tool criterion (a check)",
+      "refusedIn": "5.0.0",
+      "forgetAfter": "2027-04-06",
+      "docPattern": "\\b(required_patterns|forbidden_patterns|regex_patterns|keyword_count)\\b"
+    },
+    {
+      "id": "prompt-engine-gate-verdict-string",
+      "kind": "tool-parameter",
+      "retired": "a string gate_verdict",
+      "replacement": "the structured object {overall, rationale, per_gate?, reminders?}",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "gate_verdict\"?\\s*[:=]\\s*['\"]"
+    }
+  ]
+}

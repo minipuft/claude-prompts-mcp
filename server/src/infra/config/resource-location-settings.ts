@@ -4,6 +4,7 @@ import path from 'path';
 
 import { DEFAULT_PROMPTS_CONFIG } from '#shared/types/core-config.js';
 import { describeUnusableDirectory, PathSettingError } from '#shared/utils/path-setting.js';
+import { retirementNotice } from '#shared/utils/retirement-notice.js';
 
 /** The reserved `paths.resources` entry: the package's own resources, not a path. */
 const BUNDLED_RESOURCES_ENTRY = 'bundled';
@@ -192,12 +193,12 @@ export function assertResourceLocationSettings(
     'directory' in prompts &&
     !namesDefaultPromptsDirectory(prompts['directory'], configPath)
   ) {
+    const notice = retirementNotice('config-prompts-directory');
     refuseConfigSetting(
       configPath,
-      `sets "prompts.directory" to ${describeConfigValue(prompts['directory'])}, which is no longer read`,
-      'the resources directory that holds its prompts/ folder listed under "paths.resources" ' +
-        `instead, an ordered list in which "${BUNDLED_RESOURCES_ENTRY}" names the package's own ` +
-        'resources, or remove "prompts.directory" to use the default'
+      `sets "${notice.retired}" to ${describeConfigValue(prompts['directory'])}, which is no ` +
+        `longer read (retired in ${notice.refusedIn})`,
+      notice.replacement
     );
   }
 

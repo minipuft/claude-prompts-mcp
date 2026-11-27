@@ -363,6 +363,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:retirements',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways for check 1 — an entry with no `retirementNotice` site fails, and a site whose literal id names no entry (or that passes no literal) fails; check 2 likewise fails an entry with no driver and a driver for an id the ledger does not hold. `tests/unit/scripts/validate-retirements.test.ts` plants each case and a commented-out call that must not count as a site. Check 4 fails only past `forgetAfter` under a higher major, and only warns under the same major. Check 3 fails a user-facing line naming a retired spelling (a guide naming `MCP_RESOURCES_PATH`, a tool-contract description, a resource file) by file:line and entry, and passes the same text in `docs/adr/` or `CHANGELOG.md`; check 5 fails a hand-edited `docs/reference/upgrading.md`. NOT checked: that a driver reaches the real boundary rather than a stand-in; the driver test asserts the refusal carries the entry text, and review owns the rest; an untracked doc is not scanned until it is staged',
+  },
+  {
     script: 'validate:phase-header-drift',
     io: 'read',
     reads: ['file', 'walk'],
@@ -418,13 +425,6 @@ export const SUITE = [
     reads: ['file', 'spawn', 'tracked'],
     converse:
       "CHECKED — a planted `process.env['MCP_WORKSPACE'] = '/tmp/x';` in an existing test file is reported by file:line and the run exits 1; removing it returns the run to exit 0. UNCHECKED and known — a computed key (`process.env[key] = ...`) and `Object.assign(process.env, ...)` are not matched, and neither occurs outside the helper",
-  },
-  {
-    script: 'validate:profile-docs',
-    io: 'read',
-    reads: ['file', 'spawn', 'tracked'],
-    converse:
-      'CHECKED — a planted line naming `MCP_RESOURCES_PATH` appended to a tracked guide under `docs/` is reported by file:line and the run exits 1; removing it returns the run to exit 0. UNCHECKED and known — an untracked doc is not scanned until it is staged',
   },
   {
     script: 'validate:documented-tool-actions',
