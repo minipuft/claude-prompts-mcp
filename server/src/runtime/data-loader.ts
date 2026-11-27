@@ -24,6 +24,7 @@ import type { Stats } from 'node:fs';
 import { summarizeQuarantine } from '#mcp/tools/shared/quarantine-report.js';
 import { loadPromptsAcrossRoots, mergePromptResults } from '#modules/prompts/prompt-root-loader.js';
 import { getSkillsSyncConfigPath } from '#modules/skills-sync/service.js';
+import { retiredSkillsSyncExportsRefusal } from '#shared/utils/retired-skills-sync-exports.js';
 
 export interface PromptDataLoadParams {
   logger: Logger;
@@ -268,8 +269,6 @@ async function statUnlessAbsent(target: string): Promise<Stats | undefined> {
  */
 interface SkillsSyncDeregistrationConfig {
   registrations?: Record<string, unknown>;
-  /** @deprecated flat pre-`registrations` list, still honored on read */
-  exports?: unknown;
 }
 
 /** One client's scoped selection, once it has survived the runtime shape checks. */
@@ -292,10 +291,6 @@ function collectRegisteredKeys(
   config: SkillsSyncDeregistrationConfig
 ): string[] | typeof ALL_RESOURCES {
   const keys: string[] = [];
-
-  if (Array.isArray(config.exports)) {
-    keys.push(...config.exports.filter((entry): entry is string => typeof entry === 'string'));
-  }
 
   for (const selection of Object.values(config.registrations ?? {})) {
     if (selection === 'all') return ALL_RESOURCES;
@@ -323,10 +318,11 @@ function collectRegisteredKeys(
  * intended split — skill for the native path, `>>` when the caller wants the
  * full gate and chain machinery.
  *
- * Reads `registrations` (the canonical shape) and unions every client and scope,
- * since a prompt exported to any client is skill-served. The legacy flat
- * `exports` list is still honored for configs that predate `registrations`.
- * Returns an empty set when the file is missing or declares neither key.
+ * Reads `registrations` and unions every client and scope, since a prompt exported to
+ * any client is skill-served. A file carrying the retired top-level `exports` key is
+ * refused: the server logs the refusal and deregisters nothing, the same outcome as an
+ * unreadable file, so a stale file never stops startup or a hot reload.
+ * Returns an empty set when the file is missing, refused, or declares no `registrations`.
  */
 export async function loadSkillsSyncExports(
   pathResolver: PathResolver | undefined,
@@ -344,6 +340,12 @@ export async function loadSkillsSyncExports(
     const config = yaml.load(content) as SkillsSyncDeregistrationConfig | null;
 
     if (config === null || typeof config !== 'object') {
+      return new Set();
+    }
+
+    const refusal = retiredSkillsSyncExportsRefusal(configPath, config);
+    if (refusal !== undefined) {
+      logger.error(`Skills sync: ${refusal}`);
       return new Set();
     }
 

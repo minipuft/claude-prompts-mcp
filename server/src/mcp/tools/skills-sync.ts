@@ -15,6 +15,7 @@ import {
   type SkillsSyncPaths,
   type SkillsSyncRunReport,
 } from '#modules/skills-sync/service.js';
+import { retiredSkillsSyncExportsRefusal } from '#shared/utils/retired-skills-sync-exports.js';
 
 export const SKILLS_SYNC_OPERATIONS = [
   'status',
@@ -54,7 +55,7 @@ interface ManifestCountRow {
 interface SkillsSyncStatus {
   configPath: string;
   configExists: boolean;
-  selectionSource: 'registrations' | 'exports' | 'none';
+  selectionSource: 'registrations' | 'none';
   configuredCount: number;
   clients: Array<{
     id: string;
@@ -80,6 +81,61 @@ function createStructuredResponse(
   }
 
   return response;
+}
+
+function countScopedEntries(scoped: Record<string, unknown>): number {
+  let count = 0;
+  for (const scope of ['user', 'project']) {
+    const entries = scoped[scope];
+    if (Array.isArray(entries)) {
+      count += entries.filter((entry) => typeof entry === 'string').length;
+    }
+  }
+  return count;
+}
+
+/** What the status reads from skills-sync.yaml: the selection it holds, or the reason it is refused. */
+type StatusSelection =
+  | { refusal: string }
+  | {
+      refusal?: undefined;
+      configExists: boolean;
+      selectionSource: SkillsSyncStatus['selectionSource'];
+      configuredCount: number;
+      registrations: Record<string, unknown> | null;
+    };
+
+async function readStatusSelection(configPath: string): Promise<StatusSelection> {
+  // No initializer: the try assigns true, the catch assigns false.
+  let configExists: boolean;
+  let parsed = null as { registrations?: Record<string, unknown> } | null;
+  try {
+    const raw = await readFile(configPath, 'utf-8');
+    configExists = true;
+    parsed = yaml.load(raw) as { registrations?: Record<string, unknown> } | null;
+  } catch {
+    configExists = false;
+  }
+
+  const refusal = retiredSkillsSyncExportsRefusal(configPath, parsed);
+  if (refusal !== undefined) return { refusal };
+
+  const registrations =
+    parsed?.registrations != null && typeof parsed.registrations === 'object'
+      ? parsed.registrations
+      : null;
+  let configuredCount = 0;
+  for (const registration of Object.values(registrations ?? {})) {
+    if (registration != null && typeof registration === 'object') {
+      configuredCount += countScopedEntries(registration as Record<string, unknown>);
+    }
+  }
+  return {
+    configExists,
+    selectionSource: registrations === null ? 'none' : 'registrations',
+    configuredCount,
+    registrations,
+  };
 }
 
 export class ConsolidatedSkillsSync {
@@ -113,51 +169,15 @@ export class ConsolidatedSkillsSync {
 
   private async getStatus(): Promise<ToolResponse> {
     const configPath = getSkillsSyncConfigPath(this.paths);
-    // No initializer: the try assigns true, the catch assigns false.
-    let configExists: boolean;
-    let selectionSource: SkillsSyncStatus['selectionSource'] = 'none';
-    let configuredCount = 0;
-    let registrations: Record<string, unknown> | null = null;
-    let exportsConfig: Record<string, unknown> | 'all' | null = null;
-
-    const countScopedEntries = (scoped: Record<string, unknown>): number => {
-      let count = 0;
-      for (const scope of ['user', 'project']) {
-        const entries = scoped[scope];
-        if (Array.isArray(entries)) {
-          count += entries.filter((entry) => typeof entry === 'string').length;
-        }
-      }
-      return count;
-    };
-
-    try {
-      const raw = await readFile(configPath, 'utf-8');
-      configExists = true;
-      const parsed = yaml.load(raw) as {
-        registrations?: Record<string, unknown>;
-        exports?: Record<string, unknown> | 'all';
-      } | null;
-      if (parsed?.registrations != null && typeof parsed.registrations === 'object') {
-        selectionSource = 'registrations';
-        registrations = parsed.registrations;
-        for (const registration of Object.values(parsed.registrations)) {
-          if (registration != null && typeof registration === 'object') {
-            configuredCount += countScopedEntries(registration as Record<string, unknown>);
-          }
-        }
-      } else if (parsed?.exports != null) {
-        selectionSource = 'exports';
-        exportsConfig = parsed.exports;
-        if (parsed.exports === 'all') {
-          configuredCount = 0;
-        } else if (typeof parsed.exports === 'object') {
-          configuredCount = countScopedEntries(parsed.exports);
-        }
-      }
-    } catch {
-      configExists = false;
+    const source = await readStatusSelection(configPath);
+    if (source.refusal !== undefined) {
+      this.logger.error(`skills_sync status failed: ${source.refusal}`);
+      return createStructuredResponse(`skills_sync status failed: ${source.refusal}`, true, {
+        action: 'status',
+        error: source.refusal,
+      });
     }
+    const { configExists, selectionSource, configuredCount, registrations } = source;
 
     const clients = listSupportedSkillsSyncClients().map((clientId) => {
       let entryCount = 0;
@@ -172,13 +192,6 @@ export class ConsolidatedSkillsSync {
         } else if (registration != null && typeof registration === 'object') {
           registrationMode = 'scoped';
           registrationCount = countScopedEntries(registration as Record<string, unknown>);
-        }
-      } else if (selectionSource === 'exports' && exportsConfig != null) {
-        if (exportsConfig === 'all') {
-          registrationMode = 'all';
-        } else {
-          registrationMode = 'scoped';
-          registrationCount = countScopedEntries(exportsConfig);
         }
       } else if (selectionSource === 'none') {
         registrationMode = 'all';
@@ -209,11 +222,7 @@ export class ConsolidatedSkillsSync {
     };
 
     const selectionLine =
-      selectionSource === 'registrations'
-        ? 'registrations'
-        : selectionSource === 'exports'
-          ? 'exports (legacy fallback)'
-          : 'none (all resources eligible)';
+      selectionSource === 'registrations' ? 'registrations' : 'none (all resources eligible)';
 
     const lines = [
       'Skills Sync Status',
