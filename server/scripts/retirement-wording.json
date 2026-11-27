@@ -38,27 +38,6 @@
   ],
   "exemptions": [
     {
-      "id": "prompt-engine-options-prompt-values",
-      "phrase": "legacy",
-      "sites": [
-        {
-          "file": "docs/reference/mcp-tools.md",
-          "lines": 2
-        },
-        {
-          "file": "server/tooling/contracts/prompt-engine.json",
-          "lines": 2
-        },
-        {
-          "file": "server/src/mcp/contracts/schemas/_generated/prompt_engine.generated.ts",
-          "lines": 2
-        }
-      ],
-      "reason": "prompt_engine accepts prompt argument values in options as well as in inputs, which replaced it for that use; options also carries client_profile, which nothing else carries",
-      "asOf": "2026-11-27",
-      "removeWhen": "options is narrowed to execution hints and prompt values sent in it are refused through a ledger entry, or options is described without the word"
-    },
-    {
       "id": "outside-the-product",
       "phrase": "deprecated",
       "sites": [

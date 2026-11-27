@@ -56,7 +56,7 @@ print(json.dumps({"words": len(text.split()), "chars": len(text)}))
 **Use it:**
 
 ```
-prompt_engine(command: ">>word_count", options: {text: "Hello world"})
+prompt_engine(command: ">>word_count", inputs: {text: "Hello world"})
 ```
 
 Result available in template as `{{tool_counter}}`.

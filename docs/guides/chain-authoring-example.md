@@ -28,7 +28,7 @@ Natural language → structured chain. Four phases emerged:
 Each phase becomes its own prompt. Create them first—the chain references them.
 
 ```bash
-prompt_engine(command:">>create_prompt", options:{
+prompt_engine(command:">>create_prompt", inputs:{
   "id": "doc_discovery",
   "name": "Documentation Discovery",
   "category": "knowledge-capture",
@@ -50,7 +50,7 @@ Repeat for `doc_scraper`, `doc_analyzer`, `skill_synthesizer`. Each has focused 
 Reference step prompts in `chainSteps`. Add gates for quality checkpoints.
 
 ```bash
-prompt_engine(command:">>create_prompt", options:{
+prompt_engine(command:">>create_prompt", inputs:{
   "id": "skill_from_docs",
   "name": "Skill From Documentation",
   "category": "knowledge-capture",
