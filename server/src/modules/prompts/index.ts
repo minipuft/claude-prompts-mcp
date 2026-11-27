@@ -251,9 +251,9 @@ export class PromptAssetManager {
 
     // `promptsDir` IS the prompts root. This parameter used to be a prompts CONFIG FILE path and
     // was reduced with `path.dirname`; once callers passed the directory itself, that put the
-    // watcher on the root's PARENT — `<workspace>/resources`, or the whole workspace for a legacy
-    // `<workspace>/prompts` — polling every resource type and any runtime state beside them, and
-    // discovering the sibling type folders as "categories" while the real ones went untagged.
+    // watcher on the root's PARENT — `<workspace>/resources` — polling every resource type and any
+    // runtime state beside them, and discovering the sibling type folders as "categories" while
+    // the real ones went untagged.
     //
     // Discover categories under EVERY root the loader reads, not just the primary one.
     //

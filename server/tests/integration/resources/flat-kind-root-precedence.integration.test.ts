@@ -16,10 +16,10 @@
  * root list would assert the order this file also wrote. Here `PathResolver` derives the roots from
  * a real `MCP_WORKSPACE`, the loaders walk real directories, and the index is a real SQLite table.
  *
- * WHY THE LEGACY `<workspace>/<type>/` CONVENTION IS THE OVERLAY. It is the only overlay a plain
- * workspace can have that is distinct from the primary: `getOverlayResourceDirs` offers
- * `<ws>/<type>` and `<ws>/resources/<type>`, and the second IS what `getGatesPath()` resolves to,
- * so it is filtered out as the primary. Answering the row's first question read-only on
+ * WHY A `paths.resources` ENTRY IS THE OVERLAY. It is the overlay a plain workspace has that is
+ * distinct from the primary: `getResourceLocations` lists the profile's `<ws>/resources/<type>`,
+ * which IS what `getGatesPath()` resolves to and so is filtered out as the primary, then each
+ * listed `<entry>/<type>`. Answering the row's first question read-only on
  * 2026-09-15: no real install on this machine carries a same-id pair across roots for these three
  * kinds — `~/.claude/resources` holds only `prompts/`, and the plugin's workspace
  * (`~/.claude/plugins/data/claude-prompts-inline`) holds only `logs/` and `runtime-state/`. This
@@ -113,6 +113,8 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
   let tmpRoot: string;
   let packageRoot: string;
   let workspace: string;
+  /** The `paths.resources` entry whose `<type>/` folders are the overlay. */
+  let library: string;
   let dbManager: SqliteEngine;
   let pathResolver: PathResolver;
   /** `{ kind: { overlay, primary, bundled } }` — the entry-point path written in each root. */
@@ -124,6 +126,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
     tmpRoot = mkdtempSync(path.join(tmpdir(), 'flat-kind-precedence-'));
     packageRoot = path.join(tmpRoot, 'package');
     workspace = path.join(tmpRoot, 'workspace');
+    library = path.join(tmpRoot, 'library');
 
     const kinds = [
       { type: 'gates', entry: 'gate.yaml', body: gateYaml },
@@ -134,7 +137,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
     for (const { type, entry, body } of kinds) {
       const bundled = path.join(packageRoot, 'resources', type);
       const primary = path.join(workspace, 'resources', type);
-      const overlay = path.join(workspace, type);
+      const overlay = path.join(library, type);
       mkdirSync(bundled, { recursive: true });
       mkdirSync(primary, { recursive: true });
       mkdirSync(overlay, { recursive: true });
@@ -189,6 +192,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
 
     locations.set({ workspace });
     pathResolver = new PathResolver({ cli: {}, packageRoot });
+    pathResolver.readResourceLocationsFrom(() => ({ resources: [library, 'bundled'] }));
 
     dbManager = await SqliteEngine.getInstance(mockLogger as never, {
       dbPath: path.join(path.join(tmpRoot, 'state'), 'runtime-state', 'state.db'),
@@ -217,7 +221,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
     return pathResolver.getStylesPath();
   }
 
-  it('resolves the primary and the legacy overlay as two distinct roots', () => {
+  it('resolves the primary and the listed overlay as two distinct roots', () => {
     // FIXTURE CONTROL, before any precedence claim: the tree really does present three roots per
     // kind, and the primary really is the workspace's `resources/<type>/`. A tree where the overlay
     // collapsed into the primary would satisfy every assertion below for free.
@@ -226,11 +230,11 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
       expect(roots.primary).toBe(path.join(workspace, 'resources', type));
       expect(roots.overlays).toEqual([
         path.join(packageRoot, 'resources', type),
-        path.join(workspace, type),
+        path.join(library, type),
       ]);
       expect(roots.lookupDirs).toEqual([
         path.join(workspace, 'resources', type),
-        path.join(workspace, type),
+        path.join(library, type),
         path.join(packageRoot, 'resources', type),
       ]);
     }
@@ -352,7 +356,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
       const records = loader.getQuarantine().byId('belowwinner');
       expect(records).toHaveLength(1);
       expect(records[0]?.path).toBe(written['gates']?.['belowWinnerOverlay']);
-      expect(records[0]?.root).toBe(path.join(workspace, 'gates'));
+      expect(records[0]?.root).toBe(path.join(library, 'gates'));
       expect(records[0]?.type).toBe('gate');
       expect(records[0]?.error).not.toBe('');
     });
@@ -375,7 +379,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
       const records = loader.getQuarantine().byId('belowwinner');
       expect(records).toHaveLength(1);
       expect(records[0]?.path).toBe(written['frameworks']?.['belowWinnerOverlay']);
-      expect(records[0]?.root).toBe(path.join(workspace, 'frameworks'));
+      expect(records[0]?.root).toBe(path.join(library, 'frameworks'));
       expect(records[0]?.type).toBe('framework');
       expect(records[0]?.error).not.toBe('');
     });
@@ -395,7 +399,7 @@ describe('the primary root outranks an overlay for gates, frameworks and styles'
       const records = loader.getQuarantine().byId('belowwinner');
       expect(records).toHaveLength(1);
       expect(records[0]?.path).toBe(written['styles']?.['belowWinnerOverlay']);
-      expect(records[0]?.root).toBe(path.join(workspace, 'styles'));
+      expect(records[0]?.root).toBe(path.join(library, 'styles'));
       expect(records[0]?.type).toBe('style');
       expect(records[0]?.error).not.toBe('');
     });

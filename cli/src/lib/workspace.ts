@@ -3,6 +3,10 @@ import { join, resolve } from 'node:path';
 
 import type { ResourceLocation } from '@cli-shared/resource-operations.js';
 import {
+  describeRetiredRootLayout,
+  findRetiredRootFolders,
+} from '@cli-shared/retired-root-layout.js';
+import {
   isExcludedCategoryDirectoryName,
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
@@ -17,6 +21,9 @@ import type { ResourceType } from './types.js';
 
 /**
  * Resolve the workspace directory from explicit flag, env var, or cwd.
+ *
+ * A workspace whose root holds resources in a `<type>/` folder is refused: the server no longer
+ * reads that layout, so `cpm` would be reporting on resources the server does not serve.
  *
  * Priority:
  *   1. --workspace CLI flag (explicit parameter)
@@ -36,12 +43,22 @@ export function resolveWorkspace(explicit?: string): string {
     throw new Error(`Workspace path is not a directory: ${resolved}`);
   }
 
+  const refusal = retiredRootLayoutRefusal(resolved);
+  if (refusal !== undefined) throw new Error(refusal);
   return resolved;
 }
 
+/** The refusal for a folder whose root holds resources in a `<type>/` folder, else undefined. */
+export function retiredRootLayoutRefusal(folder: string): string | undefined {
+  const retired = findRetiredRootFolders(folder);
+  if (retired.length === 0) return undefined;
+  return describeRetiredRootLayout(folder, retired, 'Refusing to use the workspace:');
+}
+
 /**
- * Resolve a resource directory within a workspace.
- * Checks `resources/<type>` first, then falls back to `<type>/` (legacy layout).
+ * Resolve a resource directory within a workspace: `resources/<type>`, the only layout the server
+ * serves. A workspace root holding resources in `<type>/` is refused by {@link resolveWorkspace}
+ * before any command reaches here.
  */
 export function resolveResourceDir(
   workspace: string,
@@ -50,14 +67,7 @@ export function resolveResourceDir(
   const resourcesPath = resolve(workspace, 'resources', type);
   if (existsSync(resourcesPath)) return resourcesPath;
 
-  const directPath = resolve(workspace, type);
-  if (existsSync(directPath)) return directPath;
-
-  throw new Error(
-    `No ${type} directory found in workspace: ${workspace}\n` +
-      `  Tried: ${resourcesPath}\n` +
-      `  Tried: ${directPath}`,
-  );
+  throw new Error(`No ${type} directory found in workspace: ${workspace}\n  Tried: ${resourcesPath}`);
 }
 
 /**

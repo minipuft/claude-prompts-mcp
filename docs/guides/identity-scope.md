@@ -303,9 +303,8 @@ In practice:
 | Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"                                             |
 
 Resource files use launch-time paths, independently of `workspaceId`. Each type uses
-`<workspace>/resources/<type>` when present, otherwise an existing legacy `<workspace>/<type>`
-directory, otherwise `<workspace>/resources/<type>` for its first write. The type directory need
-not exist yet; resolving it creates nothing. This also applies when the workspace is the package
+`<workspace>/resources/<type>`, which its first write creates. The type directory need not exist
+yet; resolving it creates nothing. This also applies when the workspace is the package
 root. The project folder, the `paths.resources` entries and, unless a list leaves `"bundled"` out,
 the bundled resources still contribute to reads. A missing workspace refuses startup.
 

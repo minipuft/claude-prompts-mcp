@@ -45,10 +45,21 @@ const TEST_DIR = testScratchPath('tracked-roots');
 const PACKAGE_ROOT = path.join(TEST_DIR, 'package');
 const WORKSPACE = path.join(TEST_DIR, 'workspace');
 const PRIMARY = path.join(WORKSPACE, 'resources', 'prompts');
-const OVERLAY = path.join(WORKSPACE, 'prompts');
+/** A `paths.resources` entry: the overlay is its `prompts/` folder. */
+const LIBRARY = path.join(TEST_DIR, 'library');
+const OVERLAY = path.join(LIBRARY, 'prompts');
 const GATES = path.join(WORKSPACE, 'resources', 'gates');
 const BUNDLED = path.join(PACKAGE_ROOT, 'resources', 'prompts');
 const DB_PATH = path.join(TEST_DIR, 'runtime-state', 'state.db');
+
+/** A resolver whose `paths.resources` lists `LIBRARY` ahead of the bundle. */
+function resolverWithLibrary(
+  options: Partial<ConstructorParameters<typeof PathResolver>[0]> = {}
+): PathResolver {
+  const resolver = new PathResolver({ cli: {}, packageRoot: PACKAGE_ROOT, ...options });
+  resolver.readResourceLocationsFrom(() => ({ resources: [LIBRARY, 'bundled'] }));
+  return resolver;
+}
 
 /**
  * This file pins WHICH change is logged under which id; what a disk edit records in
@@ -93,7 +104,7 @@ describe('the change tracker spans operator roots, one file per id', () => {
     const built = buildResourceChangeTrackerAuxiliaryReloadConfig(
       logger,
       configManager,
-      new PathResolver({ cli: {}, packageRoot: PACKAGE_ROOT }),
+      resolverWithLibrary(),
       NO_VERSIONS
     );
     if (built === undefined) throw new Error('tracker registration was not built');
@@ -116,8 +127,7 @@ describe('the change tracker spans operator roots, one file per id', () => {
     dbManager.run(`DELETE FROM resource_changes`);
   });
 
-  const roots = () =>
-    trackedResourceRoots(configManager, new PathResolver({ cli: {}, packageRoot: PACKAGE_ROOT }));
+  const roots = () => trackedResourceRoots(configManager, resolverWithLibrary());
 
   /** Every `resource_changes` row for one id, oldest first. */
   const rowsFor = (resourceId: string): Array<{ operation: string; file_path: string }> =>
@@ -202,9 +212,7 @@ describe('the change tracker spans operator roots, one file per id', () => {
   it('judges which copy serves by the roots as they are now, after a project .claude-prompts/ appears', async () => {
     const projectDir = path.join(TEST_DIR, 'project');
     const projectPrompts = path.join(projectDir, '.claude-prompts', 'resources', 'prompts');
-    const resolver = new PathResolver({
-      cli: {},
-      packageRoot: PACKAGE_ROOT,
+    const resolver = resolverWithLibrary({
       projectDiscovery: true,
       projectLaunch: { env: { CLAUDE_PROJECT_DIR: projectDir }, cwd: TEST_DIR },
     });

@@ -100,11 +100,8 @@ async function validatePackageRoot(root: string): Promise<void> {
     missing.push('config.json');
   }
 
-  // Prompts directory: resources/prompts (current) or prompts (legacy)
-  const hasResourcesPrompts = await pathExists(path.join(root, 'resources', 'prompts'));
-  const hasLegacyPrompts = await pathExists(path.join(root, 'prompts'));
-  if (!hasResourcesPrompts && !hasLegacyPrompts) {
-    missing.push('prompts directory (resources/prompts/ or prompts/)');
+  if (!(await pathExists(path.join(root, 'resources', 'prompts')))) {
+    missing.push('prompts directory (resources/prompts/)');
   }
 
   if (missing.length > 0) {

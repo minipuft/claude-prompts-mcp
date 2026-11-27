@@ -53,16 +53,32 @@ describe('workspace-init', () => {
       expect(result.message).toContain('Workspace already exists');
     });
 
-    it('fails if legacy prompts directory exists', () => {
-      const targetPath = join(tempDir, 'legacy');
-      const legacyDir = join(targetPath, 'prompts');
-      mkdirSync(legacyDir, { recursive: true });
-      writeFileSync(join(legacyDir, 'something.yaml'), 'id: test');
+    it('refuses a prompts folder at the workspace root that holds a prompt, creating nothing', () => {
+      const targetPath = join(tempDir, 'root-layout');
+      const promptDir = join(targetPath, 'prompts', 'demo', 'hello');
+      mkdirSync(promptDir, { recursive: true });
+      writeFileSync(join(promptDir, 'prompt.yaml'), 'id: hello');
 
       const result = initWorkspace(targetPath);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Workspace already exists');
+      expect(result.message).toContain('Refusing to create a workspace:');
+      expect(result.message).toContain(
+        `Move: ${join(targetPath, 'prompts')} -> ${join(targetPath, 'resources', 'prompts')}`
+      );
+      expect(existsSync(join(targetPath, 'resources'))).toBe(false);
+    });
+
+    it('scaffolds beside a root prompts folder that holds no prompt', () => {
+      const targetPath = join(tempDir, 'unrelated-prompts');
+      const legacyDir = join(targetPath, 'prompts');
+      mkdirSync(legacyDir, { recursive: true });
+      writeFileSync(join(legacyDir, 'notes.yaml'), 'id: test');
+
+      const result = initWorkspace(targetPath);
+
+      expect(result.success).toBe(true);
+      expect(existsSync(join(targetPath, 'resources', 'prompts'))).toBe(true);
     });
 
     it('succeeds if prompts directory exists but is empty', () => {

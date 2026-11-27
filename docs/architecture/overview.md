@@ -800,8 +800,7 @@ MCP notification sent to clients
 | Change log   | `trackedResourceRoots()` — primary prompts and gates dirs plus every overlay candidate, **not** the bundled tree                            | `buildResourceChangeTrackerAuxiliaryReloadConfig()`       |
 
 The prompts row watches each prompts root itself. Until 2026-09-17 the primary was watched through
-its PARENT — `<workspace>/resources`, or the whole workspace for a legacy `<workspace>/prompts` —
-because `startHotReload` still reduced its argument with `path.dirname` after callers had switched
+its PARENT, `<workspace>/resources`, because `startHotReload` still reduced its argument with `path.dirname` after callers had switched
 from a config-file path to the directory. Every other type keeps its own watcher, so nothing was
 observed only through that parent.
 

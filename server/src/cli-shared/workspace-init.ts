@@ -1,12 +1,14 @@
 /**
  * Workspace initialization — extracted from server/src/index.ts.
  *
- * Pure function using only node:fs and node:path.
- * No runtime, config, or logging dependencies.
+ * Touches the filesystem only; the one resource check it makes (a root folder the server no longer
+ * reads) is `retired-root-layout.ts`. No runtime, config, or logging dependencies.
  */
 
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+
+import { describeRetiredRootLayout, findRetiredRootFolders } from './retired-root-layout.js';
 
 export type StarterPrompt = {
   id: string;
@@ -77,12 +79,21 @@ export function initWorkspace(targetPath: string): WorkspaceInitResult {
     const workspacePath = resolve(targetPath);
     const promptsDir = join(workspacePath, 'resources', 'prompts');
 
-    // Check if workspace already exists (check both new and legacy paths)
-    const legacyPromptsDir = join(workspacePath, 'prompts');
-    if (
-      (existsSync(promptsDir) && readdirSync(promptsDir).length > 0) ||
-      (existsSync(legacyPromptsDir) && readdirSync(legacyPromptsDir).length > 0)
-    ) {
+    // A root `<type>/` folder holding resources is refused, as the server refuses it at startup:
+    // scaffolding `resources/` beside it would leave two folders and serve only one.
+    const retiredFolders = findRetiredRootFolders(workspacePath);
+    if (retiredFolders.length > 0) {
+      return {
+        success: false,
+        message: describeRetiredRootLayout(
+          workspacePath,
+          retiredFolders,
+          'Refusing to create a workspace:'
+        ),
+      };
+    }
+
+    if (existsSync(promptsDir) && readdirSync(promptsDir).length > 0) {
       return {
         success: false,
         message: `Workspace already exists at ${workspacePath}\nFound prompts directory (non-empty)`,
