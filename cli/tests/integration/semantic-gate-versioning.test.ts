@@ -172,7 +172,7 @@ beforeEach(async () => {
   await writeFile(siblingFile, SIBLING);
   await writeFile(
     join(workspace, "config.json"),
-    JSON.stringify({ identity: { launchDefaults: { workspaceId: SCOPE } } }),
+    JSON.stringify({ version: 5, identity: { launchDefaults: { workspaceId: SCOPE } } }),
   );
   const engine = await SqliteEngine.getInstance(logger, {
     dbPath: join(workspace, "runtime-state/state.db"),

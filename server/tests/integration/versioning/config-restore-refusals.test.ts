@@ -19,7 +19,10 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { setConfigValueRecorded } from '../../../src/cli-shared/config-checkpoint.js';
+import {
+  recordConfigWrite,
+  setConfigValueRecorded,
+} from '../../../src/cli-shared/config-checkpoint.js';
 import {
   loadConfigHistory,
   rollbackConfigVersion,
@@ -152,6 +155,30 @@ describe('a config rollback refuses rather than inventing a document', () => {
     const retry = await rollbackConfigVersion(workspace, 1);
     expect(retry.ok).toBe(true);
     expect(readFileSync(configPath, 'utf8')).toBe(HAND_AUTHORED);
+  });
+
+  // A version recorded before 5.0 holds a file with no `version`, which no reader accepts. Restoring
+  // it would leave a config the server refuses at its next start, so the restore refuses first,
+  // with the text the server and `cpm` print for such a file.
+  it('refuses to restore a recorded config with no "version", naming its pre-5.0 keys', async () => {
+    const pre5 = '{ "gates": { "mode": "off" } }\n';
+    writeFileSync(configPath, pre5, 'utf8');
+    // The prior bytes become version 1, the edited file version 2; the checkpoint reads bytes only.
+    await recordConfigWrite(configPath, 'edit to the 5.0 shape', () =>
+      writeFileSync(configPath, HAND_AUTHORED, 'utf8')
+    );
+
+    const result = await rollbackConfigVersion(workspace, 1);
+    expect(result.ok).toBe(false);
+    const refusal = result.ok === false ? result.refusal : '';
+    expect(refusal).toContain('config version 1 cannot be restored: config.jsonc is a config file');
+    expect(refusal).toContain('"gates.mode": "off" becomes "gates.enabled": false');
+    expect(refusal).toContain('Nothing was written');
+    expect(readFileSync(configPath, 'utf8')).toBe(HAND_AUTHORED);
+
+    // Positive control: version 2 of the same history restores, so the refusal is about the
+    // recorded shape rather than about a history that cannot be read.
+    expect((await rollbackConfigVersion(workspace, 2)).ok).toBe(true);
   });
 
   it('preview resolves the same plan and writes nothing', async () => {

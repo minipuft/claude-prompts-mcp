@@ -171,14 +171,15 @@ describe('paths.resources in the config file', () => {
     await expect(refusal).rejects.toThrow(/the key omitted, or a list naming at least "bundled"/);
   });
 
-  it('drops a default-equal "prompts.directory" in a 4.x file and starts on the default', async () => {
+  it('drops a default-equal "prompts.directory" in a 5.0 file and starts on the default', async () => {
     const loader = await load({
+      version: 5,
       prompts: { directory: 'resources/prompts', registerWithMcp: false },
     });
 
     expect(loader.getConfig().prompts.directory).toBe('resources/prompts');
     expect(loader.getConfig().prompts.registerWithMcp).toBe(false);
-    // Dropped, not carried: the translated file the schema checked no longer holds the key.
+    // Dropped, not carried: the file the schema checked no longer holds the key.
     expect(loader.getSchemaValidation()?.status).toBe('valid');
     expect(loader.getConfigValueWithSource('prompts.directory').source).not.toBe('file');
   });
@@ -195,23 +196,29 @@ describe('paths.resources in the config file', () => {
     expect(loader.getConfig().prompts.directory).toBe('resources/prompts');
   });
 
-  it.each([
-    ['a 5.0 file', { version: 5, prompts: { directory: 'custom/prompts' } }],
-    ['a 4.x file (no version)', { prompts: { directory: './lib/prompts', registerWithMcp: true } }],
-  ])(
-    'refuses a non-default "prompts.directory" in %s, naming the file, the key and paths.resources',
-    async (_kind, file) => {
-      const refusal = load(file);
+  it('refuses a non-default "prompts.directory" in a 5.0 file, naming the file, the key and paths.resources', async () => {
+    const refusal = load({ version: 5, prompts: { directory: 'custom/prompts' } });
 
-      await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
-      await expect(refusal).rejects.toThrow(
-        new RegExp(
-          `^Refusing to start: ${configPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} sets "prompts\\.directory"`
-        )
-      );
-      await expect(refusal).rejects.toThrow(/under "paths\.resources"/);
-    }
-  );
+    await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
+    await expect(refusal).rejects.toThrow(
+      new RegExp(
+        `^Refusing to start: ${configPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} sets "prompts\\.directory"`
+      )
+    );
+    await expect(refusal).rejects.toThrow(/under "paths\.resources"/);
+  });
+
+  // A pre-5.0 file is refused for its missing `version`, and the one refusal also names a
+  // non-default `prompts.directory`, so the operator fixes both keys in one pass.
+  it('names a non-default "prompts.directory" in the refusal of a file with no version', async () => {
+    const refusal = load({ prompts: { directory: './lib/prompts', registerWithMcp: true } });
+
+    await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
+    await expect(refusal).rejects.toThrow(
+      /"prompts\.directory": remove it; use .*"paths\.resources"/
+    );
+    await expect(refusal).rejects.toThrow(/Then add "version": 5 at the top level of the file\.$/);
+  });
 
   it('accepts a "prompts" section without "directory" (positive control for the refusal above)', async () => {
     const loader = await load({ version: 5, prompts: { registerWithMcp: false } });

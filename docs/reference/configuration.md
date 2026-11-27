@@ -179,17 +179,14 @@ an unusual path via `--config` or `MCP_CONFIG_PATH` is still checked correctly, 
 `$schema` value in an old file has no effect on server behavior. The line exists purely to help
 your editor.
 
-**Working offline, or on a pre-5.0 install:** the URL resolves starting with the first `5.x`
-release; nothing before it published `config.schema.json` to the registry. If your editor can't
-reach the network, or you're pinned to an older version, point `$schema` at the package's own copy
-instead:
+**Working offline:** if your editor can't reach the network, point `$schema` at the package's own
+copy instead:
 
 ```jsonc
 "$schema": "./node_modules/claude-prompts/config.schema.json"
 ```
 
-A file that still says `"./config.schema.json"` (the old default) keeps loading normally either
-way. The value only matters to your editor.
+The server loads the file whatever `$schema` says; the value only matters to your editor.
 
 ## Reading and Changing Settings
 
@@ -268,13 +265,9 @@ Within each candidate directory, `config.jsonc` is tried before `config.json`, a
 that exists wins. See `hooks/README.md` for the hook-specific settings this covers (currently just
 `hooks.expandedOutput`).
 
-## Upgrading from a Pre-5.0 File
+## The Version Key
 
-A `config.json` with no `"version"` key is read as a pre-5.0 file and translated in memory on
-load: renamed and moved keys resolve to their new locations, and removed sections are dropped with
-a one-time notice naming what changed. Nothing is rewritten on disk; the translation happens on
-every load until you update the file yourself. A section the product now refuses is listed on
-[Upgrading](./upgrading.md).
-
-For the full list of what moved, what was removed, and why, see the [CHANGELOG](../../CHANGELOG.md)
-and [CLI Guide § config.jsonc](../guides/cli.md#configjsonc).
+Every config file carries `"version": 5` at its top level: it names the shape the file is written
+in. A file without it is refused, by the server at startup and by any `cpm` command that reads or
+changes a setting, with a message that names each key to change and what replaces it. Nothing on
+disk is rewritten. Every refused setting is listed on [Upgrading](./upgrading.md).

@@ -89,54 +89,39 @@ describe('config schema validation warnings', () => {
   });
 
   /**
-   * The 4.x translation notice, isolated from the schema lines above — both carry `[CONFIG]`, so
-   * the filter keys on the sentence only the translation notice holds.
-   */
-  const translationNotices = (): string[] =>
-    warnSpy.mock.calls
-      .map((call) => String(call[0]))
-      .filter((line) => line.includes('translated to the 5.0 shape'));
-
-  /**
-   * The ORDER of the load steps, which is what ruling R33 fixed: translate, THEN check.
+   * The ORDER of the load steps: a file with no `version` is refused BEFORE the schema check, so
+   * the operator reads one refusal naming each pre-5.0 key rather than a schema warning per key.
+   * The `version: 5` twin is the control that makes this a statement about the ORDER rather than
+   * about the schema: the identical keys in a file that declares its version reach the check and
+   * are reported by name.
    *
-   * A 4.x key the translation handled is not drift the operator has to act on — reporting it would
-   * tell them to fix a file the server just read correctly. The `version: 5` twin is the control
-   * that makes this a statement about the ORDER rather than about the schema: the identical keys
-   * in a file that declares its version are not translated, and are reported by name.
-   *
-   * MUTATION (measured): move `checkAgainstSchema` above `translateConfigFile` in
-   * `ConfigLoader.loadConfig` and the first case fails at 2 schema warnings instead of 0.
+   * MUTATION: move `checkAgainstSchema` above `assertConfigFileIsVersioned` in
+   * `ConfigLoader.loadConfig` and the first half fails on the schema warnings it now emits.
    */
-  it('reports nothing schema-wise for a 4.x file, and by name for its version-5 twin', async () => {
-    const fourX = {
+  it('refuses a pre-5.0 file before the schema check, and reports its version-5 twin by name', async () => {
+    const pre5 = {
       frameworks: { enabled: true, systemPromptFrequency: 7 },
       advanced: { sessions: { timeoutMinutes: 90 } },
     };
 
-    await writeFile(configPath, JSON.stringify(fourX), 'utf8');
-    const fourXManager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
-    await fourXManager.loadConfig();
+    await writeFile(configPath, JSON.stringify(pre5), 'utf8');
+    const pre5Manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+    const refusal = pre5Manager.loadConfig();
 
+    await expect(refusal).rejects.toThrow('"frameworks.systemPromptFrequency"');
+    await expect(refusal).rejects.toThrow('"advanced.sessions.timeoutMinutes"');
     expect(schemaWarnings()).toHaveLength(0);
-    expect(fourXManager.getSchemaValidation()).toMatchObject({ status: 'valid', valid: true });
-    // Not silent, though — silence would hide a file that needs rewriting before 6.0.0.
-    const notices = translationNotices();
-    expect(notices).toHaveLength(1);
-    expect(notices[0]).toContain('systemPromptFrequency');
-    expect(notices[0]).toContain('advanced.sessions.timeoutMinutes');
+    expect(pre5Manager.getSchemaValidation()).toBeUndefined();
 
-    warnSpy.mockClear();
-    await writeFile(configPath, JSON.stringify({ ...fourX, version: 5 }), 'utf8');
-    const fiveXManager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
-    await fiveXManager.loadConfig();
+    await writeFile(configPath, JSON.stringify({ ...pre5, version: 5 }), 'utf8');
+    const fiveManager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+    await fiveManager.loadConfig();
 
     const warnings = schemaWarnings();
     expect(warnings).toHaveLength(2);
     expect(warnings.some((line) => line.includes('systemPromptFrequency'))).toBe(true);
     expect(warnings.some((line) => line.includes('advanced'))).toBe(true);
-    expect(fiveXManager.getSchemaValidation()).toMatchObject({ status: 'invalid', valid: false });
-    expect(translationNotices()).toHaveLength(0);
+    expect(fiveManager.getSchemaValidation()).toMatchObject({ status: 'invalid', valid: false });
   });
 
   // One ConfigLoader instance, driven through the full measured sequence: typo, unchanged

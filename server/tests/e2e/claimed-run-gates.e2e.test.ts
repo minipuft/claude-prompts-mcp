@@ -624,6 +624,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
       JSON.stringify({
+        version: 5,
         gates: { executeInlineGateDefinitions: true },
       })
     );
@@ -929,7 +930,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const roots = freshRoots();
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
-      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+      JSON.stringify({ version: 5, gates: { executeInlineGateDefinitions: true } })
     );
     const chainLine = async (server: Server, chainId: string): Promise<string | undefined> =>
       /- Chain-Scoped Temporary Gates: (.*)/.exec(
@@ -1019,7 +1020,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const roots = freshRoots();
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
-      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+      JSON.stringify({ version: 5, gates: { executeInlineGateDefinitions: true } })
     );
     const server = await startServer(roots);
     await authorResources(server);
@@ -1099,7 +1100,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const roots = freshRoots();
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
-      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+      JSON.stringify({ version: 5, gates: { executeInlineGateDefinitions: true } })
     );
     const server = await startServer(roots);
     const author = async (args: Record<string, unknown>): Promise<void> => {
@@ -1193,7 +1194,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const roots = freshRoots();
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
-      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+      JSON.stringify({ version: 5, gates: { executeInlineGateDefinitions: true } })
     );
     const definitions: Record<string, Record<string, unknown> | undefined> = {
       sv_c183: { id: 'content-structure', name: 'content-structure', guidance: 'DECL-183' },
@@ -1530,7 +1531,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     const roots = freshRoots();
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
-      JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+      JSON.stringify({ version: 5, gates: { executeInlineGateDefinitions: true } })
     );
     const server = await startServer(roots);
     const author = async (args: Record<string, unknown>): Promise<void> => {
@@ -1788,6 +1789,7 @@ describe('Streamable HTTP: a claimed run keeps its temporary gates', () => {
     writeFileSync(
       path.join(roots.workspace, 'config.json'),
       JSON.stringify({
+        version: 5,
         gates: { executeInlineGateDefinitions: true },
         phaseGuards: { mode: 'off', maxRetries: 2 },
       })

@@ -104,7 +104,7 @@ function writeLocationList(workspace: string | undefined, list: readonly string[
   mkdirSync(workspace, { recursive: true });
   writeFileSync(
     path.join(workspace, 'config.jsonc'),
-    `${JSON.stringify({ paths: { resources: list } }, null, 2)}\n`,
+    `${JSON.stringify({ version: 5, paths: { resources: list } }, null, 2)}\n`,
     'utf8'
   );
 }

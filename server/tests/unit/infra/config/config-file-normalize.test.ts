@@ -92,23 +92,7 @@ describe('config file -> runtime config mapping', () => {
       await cleanup();
     });
 
-    // The flip this case's previous stamp named: a version-less file IS a 4.x file, so the flat
-    // spelling resolves to 7 again — through `translateConfigFile`, not through this mapping,
-    // which never sees the flat key.
-    it('resolves the flat `systemPromptFrequency` of a version-less 4.x file to 7', async () => {
-      const { config, manager, cleanup } = await resolve({
-        frameworks: { enabled: true, systemPromptFrequency: 7 },
-      });
-
-      expect(config.frameworks?.injection?.systemPrompt?.frequency).toBe(7);
-      expect(manager.getFrameworksConfig().injection?.systemPrompt?.frequency).toBe(7);
-
-      await cleanup();
-    });
-
-    // The twin that makes the case above evidence about the VERSION key rather than about the
-    // flat spelling: the identical `frameworks` block under `version: 5` is not translated, so
-    // the flat key reaches no reader and the default stands.
+    // The flat pre-5.0 spelling reaches no reader in a 5.0 file: the default stands.
     it('ignores the same flat key in a `version: 5` file, resolving to the default', async () => {
       const { config, manager, cleanup } = await resolve({
         version: 5,
@@ -141,11 +125,8 @@ describe('config file -> runtime config mapping', () => {
       await cleanup();
     });
 
-    // True of a `version: 5` file specifically, which is why the fixture declares the version: the
-    // wrapper named nothing and is gone from the 5.0 file shape, so a file that says it is written
-    // in that shape and still carries `advanced` resolves to the default rather than to 90. A
-    // version-less file carrying the same key is a 4.x file and IS translated — the sibling case
-    // in `config-file-translation.test.ts` pins that half.
+    // The wrapper is gone from the 5.0 file shape, so a file that still carries `advanced`
+    // resolves to the default rather than to 90.
     it('no longer reads `advanced.sessions` from a `version: 5` file', async () => {
       const { manager, cleanup } = await resolve({
         version: 5,
@@ -266,7 +247,7 @@ describe('config file -> runtime config mapping', () => {
     };
 
     it('resolves to the loader defaults, and to nothing else', async () => {
-      const { config, cleanup } = await resolve({});
+      const { config, cleanup } = await resolve({ version: 5 });
 
       expect(config).toEqual(DEFAULTS);
       // Row 6.2 / R57: every section the schema declares is now PRESENT after a load, so `get`
@@ -326,7 +307,8 @@ describe('config file -> runtime config mapping', () => {
     // drift.
     it('defaults gates, resources and logging when the file omits them', async () => {
       const { config, cleanup } = await resolve({ version: 5 });
-      const { config: emptyConfig, cleanup: cleanupEmpty } = await resolve({});
+      // What a loader serves before its first load: the mapping applied to a file declaring nothing.
+      const emptyConfig = new ConfigLoader('never-read.json').getConfig();
 
       expect(config.gates).toEqual(emptyConfig.gates);
       expect(config.resources).toEqual(emptyConfig.resources);
@@ -337,7 +319,6 @@ describe('config file -> runtime config mapping', () => {
       expect(config.resources.registerWithMcp).toBe(false);
       expect(config.logging).toEqual({ directory: './logs', level: 'info' });
 
-      await cleanupEmpty();
       await cleanup();
     });
 
@@ -355,23 +336,6 @@ describe('config file -> runtime config mapping', () => {
       expect(config.gates.frameworkGates).toBe(true);
       expect(config.logging).toEqual({ directory: './logs', level: 'debug' });
 
-      await cleanup();
-    });
-
-    it('drops the retired `analysis` section rather than keeping its values', async () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const { config, manager, cleanup } = await resolve({
-        analysis: { semanticAnalysis: { llmIntegration: { enabled: true, model: 'gpt-4o' } } },
-      });
-
-      // The deprecation cycle is over: the section is removed by the 4.x translation, announced
-      // once, and resolves to nothing at all — not to the section's own defaults, which would be
-      // indistinguishable from a config that set them. `Config` no longer declares the field, so
-      // this checks for the key's absence at runtime rather than reading a typed member.
-      expect('analysis' in config).toBe(false);
-      expect('analysis' in manager.getConfig()).toBe(false);
-
-      warn.mockRestore();
       await cleanup();
     });
 

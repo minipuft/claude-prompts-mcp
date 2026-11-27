@@ -38,6 +38,7 @@ import {
   validateConfigDocument,
 } from '../../../src/cli-shared/config-operations.js';
 import { parseConfigText } from '../../../src/shared/utils/config-file-format.js';
+import { unversionedConfigFileRefusal } from '../../../src/shared/utils/unversioned-config-file.js';
 
 /**
  * A config nobody generated: a header comment, a block comment, an inline comment on the very
@@ -47,6 +48,7 @@ import { parseConfigText } from '../../../src/shared/utils/config-file-format.js
 const HAND_AUTHORED_JSONC = `// Our server config. Please keep the notes — they are why the values are what they are.
 
 {
+  "version": 5,
   /* Gates run the review chain. Off by default on this box; the CI image turns them on. */
   "gates": {
     "enabled": false, // flipped by hand during incident 4471
@@ -63,6 +65,7 @@ const HAND_AUTHORED_JSONC = `// Our server config. Please keep the notes — the
 
 /** A plain JSON config with the same human fingerprints a strict reader still accepts. */
 const HAND_AUTHORED_JSON = `{
+    "version": 5,
     "logging": { "level": "info" },
 
     "gates": {
@@ -100,13 +103,13 @@ describe('config file write path', () => {
 
   it('sets one key and leaves every other key untouched, in its original order', () => {
     const text = setAndReread(
-      { a: 1, b: 2, c: 3, server: { name: 'claude-prompts', port: 9090 } },
+      { version: 5, a: 1, b: 2, c: 3, server: { name: 'claude-prompts', port: 9090 } },
       'server.port',
       '9091'
     );
     const reread = JSON.parse(text) as Record<string, unknown>;
 
-    expect(Object.keys(reread)).toEqual(['a', 'b', 'c', 'server']);
+    expect(Object.keys(reread)).toEqual(['version', 'a', 'b', 'c', 'server']);
     expect(reread['a']).toBe(1);
     expect(reread['b']).toBe(2);
     expect(reread['c']).toBe(3);
@@ -117,7 +120,7 @@ describe('config file write path', () => {
     // `hooks` is read by the Python hooks, never mapped onto `Config`. A writer that persisted
     // `getConfig()` deleted it outright — which is the defect this case exists to catch.
     const text = setAndReread(
-      { hooks: { expandedOutput: true }, gates: { enabled: false } },
+      { version: 5, hooks: { expandedOutput: true }, gates: { enabled: false } },
       'gates.enabled',
       'true'
     );
@@ -128,18 +131,22 @@ describe('config file write path', () => {
   });
 
   it('adds nothing the operator did not write', () => {
-    const text = setAndReread({ gates: { enabled: false } }, 'gates.enabled', 'true');
+    const text = setAndReread({ version: 5, gates: { enabled: false } }, 'gates.enabled', 'true');
     const reread = JSON.parse(text) as Record<string, unknown>;
 
-    expect(Object.keys(reread)).toEqual(['gates']);
+    expect(Object.keys(reread)).toEqual(['version', 'gates']);
     expect(Object.keys(reread['gates'] as object)).toEqual(['enabled']);
   });
 
   it('creates intermediate objects for a key whose section is absent', () => {
-    const text = setAndReread({ gates: { enabled: true } }, 'telemetry.samplingRate', '0.5');
+    const text = setAndReread(
+      { version: 5, gates: { enabled: true } },
+      'telemetry.samplingRate',
+      '0.5'
+    );
     const reread = JSON.parse(text) as Record<string, unknown>;
 
-    expect(Object.keys(reread)).toEqual(['gates', 'telemetry']);
+    expect(Object.keys(reread)).toEqual(['version', 'gates', 'telemetry']);
     expect(reread['telemetry']).toEqual({ samplingRate: 0.5 });
   });
 
@@ -151,6 +158,20 @@ describe('config file write path', () => {
 
     expect(result.success).toBe(false);
     expect(readFileSync(configPath, 'utf8')).toBe(original);
+  });
+
+  it('refuses a config file with no "version" with the text the server refuses it with', () => {
+    writeFileSync(configPath, '{ "gates": { "mode": "off" } }\n', 'utf8');
+
+    const read = readConfigFile(configPath);
+    const set = setConfigValueAtPath(configPath, 'gates.enabled', 'true');
+
+    const expected = unversionedConfigFileRefusal(configPath, { gates: { mode: 'off' } });
+    expect(expected).toContain('"gates.mode": "off" becomes "gates.enabled": false');
+    expect(read).toEqual({ success: false, configPath, error: expected });
+    expect(set).toMatchObject({ success: false, error: expected });
+    // Refused, not rewritten.
+    expect(readFileSync(configPath, 'utf8')).toBe('{ "gates": { "mode": "off" } }\n');
   });
 
   it('reports a missing file rather than creating one', () => {

@@ -283,12 +283,8 @@ function printSubsystemAdvisory(workspace: string, type: string): void {
   const configResult = readConfig(workspace);
   if (!configResult.success || !configResult.config) return;
 
-  // Advisory only, so it reads the raw file rather than a loaded ConfigManager. A config written
-  // by the retired CLI still carries `mode: "off"` until something loads and folds it, so both
-  // spellings are recognised here; the advice printed always names the canonical key.
-  const value = getConfigValue(configResult.config, configKey);
-  const legacy = getConfigValue(configResult.config, configKey.replace(/\.enabled$/, '.mode'));
-  if (value === false || (value === undefined && legacy === 'off')) {
+  // Advisory only, so it reads the raw file rather than a loaded ConfigManager.
+  if (getConfigValue(configResult.config, configKey) === false) {
     const name = basename(configResult.configPath ?? resolveConfigPath(workspace));
     console.log(`\nNote: ${configKey} is false in ${name}. Resource won't be active until enabled:`);
     console.log(`  cpm enable ${type}`);

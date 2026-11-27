@@ -163,12 +163,20 @@ describe('versioning.maxVersions is one bound for both writers', () => {
       expect(versionsOnDisk().map((row) => row.version)).toEqual([1, 2, 3, 4, 5]);
     });
 
-    it('reads the 4.x snake_case spelling the server still folds in', async () => {
+    it('ignores the snake_case spelling, which no reader accepts', async () => {
       await fs.writeFile(
         path.join(workspace, 'config.json'),
         JSON.stringify({ version: 5, versioning: { max_versions: 7 } })
       );
-      expect(resolveConfiguredMaxVersions(workspace)).toBe(7);
+      expect(resolveConfiguredMaxVersions(workspace)).toBe(DEFAULT_MAX_VERSIONS);
+    });
+
+    it('falls back for a config file with no "version", which the reader refuses', async () => {
+      await fs.writeFile(
+        path.join(workspace, 'config.json'),
+        JSON.stringify({ versioning: { maxVersions: 7 } })
+      );
+      expect(resolveConfiguredMaxVersions(workspace)).toBe(DEFAULT_MAX_VERSIONS);
     });
 
     it('falls back rather than throwing on a malformed value', async () => {

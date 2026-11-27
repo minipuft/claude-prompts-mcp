@@ -3,11 +3,9 @@
  *
  * Transport is launch-time-only: `--transport` selects it, and `config.json` cannot — `Config`
  * carries no `transport` member for a config value to reach (`src/shared/types/core-config.ts`).
- * A `server.transport` left at `"stdio"` (or omitted) is tolerated: the schema no longer declares
- * the key at all, so it draws only the existing "does not match its schema" warning
- * (`config-schema-warning.test.ts` owns that path in general). Anything ELSE under
- * `server.transport` can never take effect, so `loadConfig` refuses to start rather than silently
- * running on the default while the operator believes they configured HTTP.
+ * A `server.transport` other than `"stdio"` can never take effect, so `loadConfig` refuses to start
+ * naming the flag, ahead of every other check — a pre-5.0 file asking for HTTP included. A
+ * `server.transport` of `"stdio"` in a 5.0 file is refused by name too: the key has no reader.
  */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
@@ -17,6 +15,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 import { ConfigLoader, TransportConfigError } from '../../../../src/infra/config/index.js';
+import { PathSettingError } from '../../../../src/shared/utils/path-setting.js';
 
 // Same resolution pattern as config-schema-warning.test.ts, one directory deeper.
 const __filename = fileURLToPath(import.meta.url);
@@ -61,26 +60,37 @@ describe('server.transport refusal at load time', () => {
     expect(message).toContain('--transport=streamable-http');
   });
 
-  // POSITIVE CONTROL — without this, the refusal assertion above could pass equally well against
-  // a loader that refuses on every load, regardless of the value it was given.
-  it('POSITIVE CONTROL — server.transport: "stdio" does not refuse, and draws only the existing schema warning', async () => {
+  // A pre-5.0 file (no `version`) asking for HTTP is answered with the flag that satisfies the
+  // request, not with the general pre-5.0 refusal: the transport check runs first.
+  it('refuses a pre-5.0 file asking for HTTP with the transport refusal, ahead of the version refusal', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({ server: { transport: 'streamable-http' } }),
+      'utf8'
+    );
+    const refusal = new ConfigLoader(configPath).loadConfig();
+
+    await expect(refusal).rejects.toBeInstanceOf(TransportConfigError);
+    await expect(refusal).rejects.toThrow('--transport=streamable-http');
+  });
+
+  it('refuses server.transport: "stdio" in a 5.0 file by name, since the key has no reader', async () => {
     await writeFile(
       configPath,
       JSON.stringify({ version: 5, server: { transport: 'stdio' } }),
       'utf8'
     );
-    const manager = new ConfigLoader(configPath, undefined, { schemaPath: SCHEMA_PATH });
+    const refusal = new ConfigLoader(configPath, undefined, {
+      schemaPath: SCHEMA_PATH,
+    }).loadConfig();
 
-    await expect(manager.loadConfig()).resolves.toBeDefined();
-
-    const schemaWarnings = warnSpy.mock.calls
-      .map((call) => String(call[0]))
-      .filter((line) => line.startsWith('[WARN] ') && line.includes('[CONFIG]'));
-    expect(schemaWarnings).toHaveLength(1);
-    expect(schemaWarnings[0]).toContain('does not match its schema');
-    expect(schemaWarnings[0]).toContain('transport');
+    await expect(refusal).rejects.toBeInstanceOf(PathSettingError);
+    await expect(refusal).rejects.toThrow('"server.transport": "stdio"');
+    await expect(refusal).rejects.toThrow('--transport=streamable-http');
   });
 
+  // POSITIVE CONTROL — without this, the refusals above could pass equally well against a loader
+  // that refuses on every load, regardless of the value it was given.
   it('omitting server.transport entirely does not refuse', async () => {
     await writeFile(configPath, JSON.stringify({ version: 5 }), 'utf8');
     const manager = new ConfigLoader(configPath);

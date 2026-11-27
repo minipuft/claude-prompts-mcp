@@ -179,8 +179,8 @@ function assertWriteTarget(
  * that is not an object, a `paths.resources` that is not a non-empty list of distinct
  * non-empty strings, or a `paths.writeTarget` naming no folder a write may land in.
  *
- * Runs against the RAW record, before `translateConfigFile`, like `assertServerTransportIsStdio`
- * in `index.ts`, so a 4.x file is held to the same rule.
+ * Runs against the RAW record of a file that declares its `version`; `loadConfig` refuses one that
+ * does not before this runs.
  */
 export function assertResourceLocationSettings(
   rawConfig: Record<string, unknown>,
