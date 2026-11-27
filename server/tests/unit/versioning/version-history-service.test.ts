@@ -272,7 +272,7 @@ describe('VersionHistoryService', () => {
     async function serviceFromConfig(raw: Record<string, unknown>) {
       const dir = await mkdtemp(path.join(tmpdir(), 'versioning-config-'));
       const configPath = path.join(dir, 'config.json');
-      await writeFile(configPath, JSON.stringify({ versioning: raw }), 'utf8');
+      await writeFile(configPath, JSON.stringify({ version: 5, versioning: raw }), 'utf8');
       const loader = new ConfigLoader(configPath);
       await loader.loadConfig();
       return {
