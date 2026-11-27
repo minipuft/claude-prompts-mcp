@@ -469,7 +469,12 @@ function selfTest() {
   declaring[0]!.arguments.push({ name: 'oldName', type: 'string' });
   const refusing = (tool: ToolOnDisk, input: JsonObject): ScriptOutput =>
     'oldName' in input
-      ? { valid: false, errors: ["'oldName' is not an argument of create_prompt; send 'name'."] }
+      ? {
+          valid: false,
+          errors: [
+            "'oldName' is not an argument of create_prompt (retired in 6.0.0); send 'name'.",
+          ],
+        }
       : execute(tool, input);
   assert.deepEqual(validateAuthoringContracts(declaring, expected, refusing, refused), []);
   assert(

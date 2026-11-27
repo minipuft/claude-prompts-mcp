@@ -8,7 +8,8 @@
  * The product never imports this module. A refusal site reads the generated projection
  * (`src/shared/utils/_generated/retirement-notices.ts`), which holds only the three fields a
  * refusal prints; the ledger's shape is checked here, once per generator or gate run, so a
- * malformed ledger cannot produce a projection.
+ * malformed ledger cannot produce a projection. A refusal that lives outside TypeScript is
+ * declared on its entry (`refusalSites`) and has no projection member.
  */
 
 import ledgerDocument from '../../tooling/contracts/registries/retirements.json' with { type: 'json' };
@@ -23,9 +24,21 @@ const RETIREMENT_KINDS = [
   'folder-layout',
   'transport',
   'tool-parameter',
+  'prompt-argument',
 ] as const;
 
 type RetirementKind = (typeof RETIREMENT_KINDS)[number];
+
+/**
+ * A refusal that lives outside TypeScript (a shipped resource script, a hook), where the projection
+ * cannot be read: a tracked file and text that file holds at its refusal.
+ */
+interface DeclaredRefusalSite {
+  /** Repository-relative path of a tracked file. */
+  readonly file: string;
+  /** One line of text the file holds where it refuses the spelling. */
+  readonly marker: string;
+}
 
 /** One ledger entry, as validated at load. */
 export interface RetirementEntry {
@@ -44,6 +57,12 @@ export interface RetirementEntry {
   readonly docPattern: string | null;
   /** Why `docPattern` is null; present exactly when it is. */
   readonly docPatternReason?: string;
+  /**
+   * Where the spelling is refused when no TypeScript site reads the projection. An entry that
+   * declares sites has no projection member; the gate checks each file is tracked and holds its
+   * marker.
+   */
+  readonly refusalSites?: readonly DeclaredRefusalSite[];
 }
 
 const ENTRY_KEYS = new Set([
@@ -55,7 +74,9 @@ const ENTRY_KEYS = new Set([
   'forgetAfter',
   'docPattern',
   'docPatternReason',
+  'refusalSites',
 ]);
+const SITE_KEYS = new Set(['file', 'marker']);
 const KEBAB_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const RELEASE_VERSION = /^\d+\.\d+\.\d+$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -101,6 +122,34 @@ function docPatternProblems(entry: Record<string, unknown>): string[] {
   return problems;
 }
 
+/** A path inside the repository, written relative to its root. */
+function isRepositoryPath(value: unknown): boolean {
+  return isNonEmptyString(value) && !value.startsWith('/') && !value.split('/').includes('..');
+}
+
+function siteProblems(site: unknown, at: string): string[] {
+  if (!isRecord(site)) return [`${at} must be an object {file, marker}`];
+  const problems = Object.keys(site)
+    .filter((key) => !SITE_KEYS.has(key))
+    .map((key) => `${at}.${key} is not a refusal site field`);
+  if (!isRepositoryPath(site['file'])) {
+    problems.push(`${at}.file must be a path relative to the repository root`);
+  }
+  const marker = site['marker'];
+  if (!isNonEmptyString(marker) || marker.includes('\n')) {
+    problems.push(`${at}.marker must be one non-empty line of text`);
+  }
+  return problems;
+}
+
+function refusalSitesProblems(value: unknown): string[] {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length === 0) {
+    return ['refusalSites must be a non-empty array of {file, marker}, or absent'];
+  }
+  return value.flatMap((site, index) => siteProblems(site, `refusalSites[${index}]`));
+}
+
 /** Every problem with one entry, each naming the field; empty when the entry is well formed. */
 function entryProblems(entry: Record<string, unknown>): string[] {
   const problems = Object.keys(entry)
@@ -121,7 +170,11 @@ function entryProblems(entry: Record<string, unknown>): string[] {
   if (typeof entry['forgetAfter'] !== 'string' || !isCalendarDate(entry['forgetAfter'])) {
     problems.push('forgetAfter must be an ISO calendar date YYYY-MM-DD');
   }
-  return [...problems, ...docPatternProblems(entry)];
+  return [
+    ...problems,
+    ...docPatternProblems(entry),
+    ...refusalSitesProblems(entry['refusalSites']),
+  ];
 }
 
 /**

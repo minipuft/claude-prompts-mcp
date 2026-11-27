@@ -17,6 +17,7 @@ import { renderUpgradingPage, UPGRADING_PAGE } from '../../../scripts/generate-r
 import { expiryOutcomes } from '../../../scripts/lib/retirement-expiry.js';
 import { listRetirements } from '../../../scripts/lib/retirement-ledger.js';
 import {
+  isProjected,
   projectionMember,
   renderRetirementProjection,
   RETIREMENT_PROJECTION,
@@ -31,6 +32,7 @@ import {
   DRIVER_FILE,
   findDriverIds,
   findRetirementSites,
+  readDeclaredSiteFiles,
   runRetirementChecks,
   scanRefusalSites,
   scanUserFacingText,
@@ -77,6 +79,7 @@ function clean(overrides: Partial<RetirementCheckInput> = {}): RetirementCheckIn
       { member: 'plantedEntry', file: 'server/src/a.ts', line: 3 },
       { member: 'otherEntry', file: 'cli/src/b.ts', line: 9 },
     ],
+    declaredFiles: {},
     driverIds: [ENTRY.id, OTHER.id],
     texts: [
       { file: 'docs/guides/clean.md', lines: [{ line: 1, text: 'Describe the current form.' }] },
@@ -123,6 +126,84 @@ describe('validate:retirements', () => {
       expect(messages).toEqual([
         'server/src/c.ts:12: unknownEntry names no entry in retirements.json.',
       ]);
+    });
+
+    describe('an entry refused outside TypeScript declares its sites', () => {
+      const SCRIPT = 'server/resources/prompts/probe/script.py';
+      const SCHEMA = 'server/resources/prompts/probe/schema.json';
+      const DECLARED = {
+        ...OTHER,
+        id: 'declared-entry',
+        refusalSites: [
+          { file: SCRIPT, marker: 'is not an argument of probe' },
+          { file: SCHEMA, marker: 'Refused; send old_name instead.' },
+        ],
+      };
+      const FILES = {
+        [SCRIPT]: "errors = [f\"'{name}' is not an argument of probe; send '{new}'.\"]\n",
+        [SCHEMA]: '{ "description": "Refused; send old_name instead." }\n',
+      };
+      const declared = (declaredFiles: Record<string, string | null>): RetirementCheckInput =>
+        clean({
+          entries: [ENTRY, OTHER, DECLARED],
+          driverIds: [ENTRY.id, OTHER.id, DECLARED.id],
+          declaredFiles,
+        });
+
+      it('passes when every declared file is present and holds its marker, with no TypeScript site', () => {
+        expect(runRetirementChecks(declared(FILES)).failures).toEqual([]);
+      });
+
+      it('fails a declared file that is not tracked, naming the entry and the file', () => {
+        const failures = runRetirementChecks(declared({ ...FILES, [SCHEMA]: null })).failures;
+
+        expect(failures).toEqual([
+          {
+            check: 1,
+            subject: 'declared-entry',
+            message: `declared-entry: declares a refusal site in ${SCHEMA}, which is not a tracked file. Point refusalSites at the file that refuses the spelling, or delete the entry.`,
+          },
+        ]);
+      });
+
+      it('fails a declared file the scan never read, as not tracked', () => {
+        const failures = runRetirementChecks(declared({ [SCRIPT]: FILES[SCRIPT] })).failures;
+
+        expect(failures).toMatchObject([{ check: 1, subject: 'declared-entry' }]);
+        expect(failures[0]?.message).toContain(SCHEMA);
+      });
+
+      it('fails a declared file that no longer holds its marker, naming the entry and the file', () => {
+        const failures = runRetirementChecks(
+          declared({ ...FILES, [SCRIPT]: 'errors = []\n' })
+        ).failures;
+
+        expect(failures).toEqual([
+          {
+            check: 1,
+            subject: 'declared-entry',
+            message: `declared-entry: ${SCRIPT} does not hold the marker "is not an argument of probe" its refusalSites declares. Restore the refusal, correct the marker, or delete the entry.`,
+          },
+        ]);
+      });
+
+      it('reads declared files from the index: a tracked file has its text, an untracked one is null', () => {
+        const root = mkdtempSync(path.join(tmpdir(), 'retirement-declared-'));
+        try {
+          git(root, 'init', '-q');
+          plant(root, SCRIPT, FILES[SCRIPT] as string);
+          plant(root, SCHEMA, FILES[SCHEMA] as string);
+          git(root, 'add', SCRIPT);
+          const files = readDeclaredSiteFiles([DECLARED], root);
+
+          expect(files).toEqual({ [SCRIPT]: FILES[SCRIPT], [SCHEMA]: null });
+          expect(runRetirementChecks(declared(files)).failures).toMatchObject([
+            { check: 1, subject: 'declared-entry' },
+          ]);
+        } finally {
+          rmSync(root, { recursive: true, force: true });
+        }
+      });
     });
 
     it('fails a site that names no member', () => {
@@ -339,14 +420,15 @@ describe('validate:retirements', () => {
       }
     });
 
-    it('renders one exported constant per ledger entry, named after its id', () => {
+    it('renders one exported constant per entry refused in TypeScript, named after its id', () => {
       const projection = renderRetirementProjection(listRetirements());
       const exported = [...projection.matchAll(/^export const (\w+): RetirementNotice/gm)].map(
         (match) => match[1]
       );
 
-      expect(exported).toHaveLength(listRetirements().length);
+      expect(exported).toHaveLength(listRetirements().filter(isProjected).length);
       expect(exported).toContain('configFileUnversioned');
+      expect(exported).not.toContain('createGateCamelCaseArgument');
     });
 
     it('renders newest refusal first, then by spelling, with one row per entry', () => {
@@ -596,10 +678,15 @@ describe('validate:retirements', () => {
     const texts = scanUserFacingText(REPO_ROOT);
     const codeStrings = scanCodeStrings(REPO_ROOT);
 
-    // The scans observed something: a site per entry and one driver per entry.
+    const declaredFiles = readDeclaredSiteFiles(entries);
+
+    // The scans observed something: a site per entry refused in TypeScript, the declared files of
+    // the others, and one driver per entry.
     expect(new Set(sites.map((site) => site.member))).toEqual(
-      new Set(entries.map((entry) => projectionMember(entry.id)))
+      new Set(entries.filter(isProjected).map((entry) => projectionMember(entry.id)))
     );
+    expect(Object.values(declaredFiles).length).toBeGreaterThan(0);
+    expect(Object.values(declaredFiles)).not.toContain(null);
     expect(texts.map((text) => text.file)).toEqual(
       expect.arrayContaining(['README.md', 'docs/reference/configuration.md'])
     );
@@ -611,6 +698,7 @@ describe('validate:retirements', () => {
       runRetirementChecks({
         entries,
         sites,
+        declaredFiles,
         driverIds,
         texts,
         codeStrings,

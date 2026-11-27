@@ -144,6 +144,54 @@
       "refusedIn": "6.0.0",
       "forgetAfter": "2027-06-01",
       "docPattern": "\\bparameter_match\\b"
+    },
+    {
+      "id": "create-prompt-camel-case-arguments",
+      "kind": "prompt-argument",
+      "retired": "the `create_prompt` arguments `systemMessage`, `userMessageTemplate`, `gateConfiguration`, `chainSteps` and `registerWithMcp`",
+      "replacement": "`system_message`, `user_message_template`, `gate_configuration`, `chain_steps` and `register_with_mcp`",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": null,
+      "docPatternReason": "Every pattern for these names matches correct text: systemMessage, userMessageTemplate, gateConfiguration and chainSteps are current prompt.yaml fields, and the create_prompt prompt.yaml and builder schema.json under server/resources/, which check 3 reads, declare each name as refused so the builder receives it and can refuse it.",
+      "refusalSites": [
+        {
+          "file": "server/resources/prompts/examples/create_prompt/tools/prompt_builder/script.py",
+          "marker": "is not an argument of create_prompt"
+        },
+        {
+          "file": "server/resources/prompts/examples/create_prompt/tools/prompt_builder/schema.json",
+          "marker": "Refused; send system_message instead."
+        },
+        {
+          "file": "server/resources/prompts/examples/create_prompt/prompt.yaml",
+          "marker": "Refused; send system_message instead."
+        }
+      ]
+    },
+    {
+      "id": "create-gate-camel-case-argument",
+      "kind": "prompt-argument",
+      "retired": "the `create_gate` argument `enforcementMode`",
+      "replacement": "`enforcement_mode`",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": null,
+      "docPatternReason": "Every pattern for this name matches correct text: enforcementMode is a current gate.yaml field, and the create_gate prompt.yaml and builder schema.json under server/resources/, which check 3 reads, declare it as refused so the builder receives it and can refuse it.",
+      "refusalSites": [
+        {
+          "file": "server/resources/prompts/examples/create_gate/tools/gate_builder/script.py",
+          "marker": "is not an argument of create_gate"
+        },
+        {
+          "file": "server/resources/prompts/examples/create_gate/tools/gate_builder/schema.json",
+          "marker": "Refused; send enforcement_mode instead."
+        },
+        {
+          "file": "server/resources/prompts/examples/create_gate/prompt.yaml",
+          "marker": "Refused; send enforcement_mode instead."
+        }
+      ]
     }
   ]
 }

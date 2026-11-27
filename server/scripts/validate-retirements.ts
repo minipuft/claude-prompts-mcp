@@ -14,6 +14,8 @@
  *      member, by name, that names an existing entry. Read from the TypeScript syntax tree of
  *      every `.ts` file under `server/src` and `cli/src`, so a commented-out read or a name quoted
  *      in prose is not a site, and a named import, a re-export or a computed member is a finding.
+ *      An entry refused outside TypeScript declares its sites instead (`refusalSites`): each is a
+ *      tracked file that must hold the entry's marker, and those sites satisfy the entry.
  *   2. every entry has a driver in the one table-driven refusal test (`DRIVERS` in
  *      `tests/unit/retirements/retirement-refusals.test.ts`), which feeds the old spelling to the
  *      real boundary; a driver for an id the ledger does not hold fails too.
@@ -49,6 +51,7 @@ import {
 import { expiryOutcomes, isoToday } from './lib/retirement-expiry.js';
 import { listRetirements, type RetirementEntry } from './lib/retirement-ledger.js';
 import {
+  isProjected,
   projectionMember,
   renderRetirementProjection,
   RETIREMENT_PROJECTION,
@@ -60,6 +63,7 @@ import {
   scanCodeStrings,
   type WordingRules,
 } from './lib/third-state-wording.js';
+import { trackedFilesUnder } from './lib/tracked-scope.js';
 import {
   listUserFacingFiles,
   readUserFacingLines,
@@ -105,12 +109,20 @@ export interface ScannedText {
   readonly lines: readonly UserFacingLine[];
 }
 
+/**
+ * The text of each file an entry declares as a refusal site, keyed by repository-relative path;
+ * null (or no key) when the file is not tracked.
+ */
+export type DeclaredSiteFiles = Readonly<Record<string, string | null>>;
+
 export interface RetirementCheckInput {
   readonly entries: readonly Pick<
     RetirementEntry,
-    'id' | 'refusedIn' | 'forgetAfter' | 'docPattern'
+    'id' | 'refusedIn' | 'forgetAfter' | 'docPattern' | 'refusalSites'
   >[];
   readonly sites: readonly RetirementSite[];
+  /** Check 1's view of the files entries declare in `refusalSites`. */
+  readonly declaredFiles: DeclaredSiteFiles;
   /** Ids the driver table covers, or null when the table could not be found. */
   readonly driverIds: readonly string[] | null;
   /** Every user-facing file, for checks 3 and 6. */
@@ -255,20 +267,52 @@ export function findDriverIds(text: string, file = DRIVER_FILE): string[] | null
   return ids;
 }
 
-/** Check 1: every entry has a site; every site reads a member that names a ledger entry. */
+/** Check 1 for one entry's declared sites: each file is tracked and holds its marker. */
+function declaredSiteFindings(
+  entry: RetirementCheckInput['entries'][number],
+  declaredFiles: DeclaredSiteFiles
+): RetirementFinding[] {
+  return (entry.refusalSites ?? []).flatMap<RetirementFinding>(({ file, marker }) => {
+    const text = declaredFiles[file] ?? null;
+    if (text === null) {
+      return [
+        {
+          check: 1,
+          subject: entry.id,
+          message: `${entry.id}: declares a refusal site in ${file}, which is not a tracked file. Point refusalSites at the file that refuses the spelling, or delete the entry.`,
+        },
+      ];
+    }
+    if (text.includes(marker)) return [];
+    return [
+      {
+        check: 1,
+        subject: entry.id,
+        message: `${entry.id}: ${file} does not hold the marker "${marker}" its refusalSites declares. Restore the refusal, correct the marker, or delete the entry.`,
+      },
+    ];
+  });
+}
+
+/**
+ * Check 1: every entry has a site, read from the projection or declared and present; every
+ * projection read names a ledger entry.
+ */
 export function checkSites(
   entries: RetirementCheckInput['entries'],
-  sites: readonly RetirementSite[]
+  sites: readonly RetirementSite[],
+  declaredFiles: DeclaredSiteFiles
 ): RetirementFinding[] {
   const known = new Set(entries.map((entry) => projectionMember(entry.id)));
   const read = new Set(sites.map((site) => site.member));
   const findings: RetirementFinding[] = entries
-    .filter((entry) => !read.has(projectionMember(entry.id)))
+    .filter((entry) => isProjected(entry) && !read.has(projectionMember(entry.id)))
     .map((entry) => ({
       check: 1,
       subject: entry.id,
       message: `${entry.id}: no refusal site reads ${projectionMember(entry.id)} from the retirement projection under ${SITE_ROOTS.join(' or ')}. Refuse the spelling at its boundary through the entry, or delete the entry.`,
     }));
+  findings.push(...entries.flatMap((entry) => declaredSiteFindings(entry, declaredFiles)));
   for (const site of sites) {
     const at = `${site.file}:${site.line}`;
     if (site.member === null) {
@@ -398,7 +442,7 @@ export function runRetirementChecks(input: RetirementCheckInput): RetirementChec
   });
   return {
     failures: [
-      ...checkSites(input.entries, input.sites),
+      ...checkSites(input.entries, input.sites, input.declaredFiles),
       ...checkDrivers(input.entries, input.driverIds),
       ...checkDocPatterns(input.entries, input.texts),
       ...checkUpgradingPage(input.expectedPage, input.upgradingPage),
@@ -430,6 +474,34 @@ export function scanRefusalSites(repoRoot = REPO_ROOT): RetirementSite[] {
   );
 }
 
+/** The files the entries declare as refusal sites, read when tracked and null when not. */
+export function readDeclaredSiteFiles(
+  entries: readonly Pick<RetirementEntry, 'refusalSites'>[],
+  repoRoot = REPO_ROOT
+): Record<string, string | null> {
+  const files = [
+    ...new Set(entries.flatMap((entry) => (entry.refusalSites ?? []).map((site) => site.file))),
+  ];
+  if (files.length === 0) return {};
+  const tracked = new Set(trackedFilesUnder(files, { cwd: repoRoot }));
+  return Object.fromEntries(
+    files.map((file) => [
+      file,
+      tracked.has(file) ? readFileSync(path.join(repoRoot, file), 'utf8') : null,
+    ])
+  );
+}
+
+/** Each declared site as `file:line` of its marker, or the file and why no line was found. */
+function declaredSiteLabels(entry: RetirementEntry, declaredFiles: DeclaredSiteFiles): string[] {
+  return (entry.refusalSites ?? []).map(({ file, marker }) => {
+    const text = declaredFiles[file] ?? null;
+    if (text === null) return `${file} (not tracked)`;
+    const index = text.split('\n').findIndex((line) => line.includes(marker));
+    return index === -1 ? `${file} (marker not found)` : `${file}:${index + 1}`;
+  });
+}
+
 function readRepoFile(relative: string): string | null {
   const file = path.join(REPO_ROOT, relative);
   return existsSync(file) ? readFileSync(file, 'utf8') : null;
@@ -450,12 +522,20 @@ function readPackageVersion(): string {
   return manifest.version;
 }
 
-function printList(entries: readonly RetirementEntry[], sites: readonly RetirementSite[]): void {
+function printList(
+  entries: readonly RetirementEntry[],
+  sites: readonly RetirementSite[],
+  declaredFiles: DeclaredSiteFiles
+): void {
+  let declared = 0;
   for (const entry of entries) {
     const member = projectionMember(entry.id);
-    const at = sites
-      .filter((site) => site.member === member)
-      .map((site) => `${site.file}:${site.line}`);
+    const labels = declaredSiteLabels(entry, declaredFiles);
+    declared += labels.length;
+    const at = [
+      ...sites.filter((site) => site.member === member).map((site) => `${site.file}:${site.line}`),
+      ...labels,
+    ];
     console.log(`${entry.id} (${entry.kind})`);
     console.log(`  retired:     ${entry.retired}`);
     console.log(`  replacement: ${entry.replacement}`);
@@ -463,14 +543,17 @@ function printList(entries: readonly RetirementEntry[], sites: readonly Retireme
     console.log(`  forgetAfter: ${entry.forgetAfter}`);
     console.log(`  sites:       ${at.length > 0 ? at.join(', ') : '(none)'}`);
   }
-  console.log(`\n${entries.length} retired spelling(s), ${sites.length} refusal site(s).`);
+  console.log(
+    `\n${entries.length} retired spelling(s), ${sites.length} refusal site(s) reading the projection, ${declared} declared outside it.`
+  );
 }
 
 function main(): void {
   const entries = listRetirements();
   const sites = scanRefusalSites();
+  const declaredFiles = readDeclaredSiteFiles(entries);
   if (process.argv.includes('--list')) {
-    printList(entries, sites);
+    printList(entries, sites, declaredFiles);
     return;
   }
   // A scan that found no call at all observed nothing; reporting it as clean would be a silence.
@@ -498,6 +581,7 @@ function main(): void {
   const { failures, warnings } = runRetirementChecks({
     entries,
     sites,
+    declaredFiles,
     texts,
     codeStrings,
     wording: loadWordingRules(REPO_ROOT),
@@ -515,8 +599,9 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
+  const declared = Object.keys(declaredFiles).length;
   console.log(
-    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page and the runtime projection current, ${warnings.length} past its date; ${codeStrings.length} code file(s) and the user-facing text free of third-state wording outside its exemptions`
+    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s) reading the projection and ${declared} declared file(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page and the runtime projection current, ${warnings.length} past its date; ${codeStrings.length} code file(s) and the user-facing text free of third-state wording outside its exemptions`
   );
 }
 

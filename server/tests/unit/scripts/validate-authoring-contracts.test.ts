@@ -76,7 +76,7 @@ function project(tool: ToolOnDisk, input: Record<string, unknown>): ScriptOutput
       valid: false,
       errors: refused.map(
         ([name, canonical]) =>
-          `'${name}' is not an argument of create_${type}; send '${canonical}'.`
+          `'${name}' is not an argument of create_${type} (retired in 6.0.0); send '${canonical}'.`
       ),
     };
   }
@@ -347,7 +347,7 @@ describe('creation authoring contract drift guard', () => {
         expect(output.auto_execute).toBeUndefined();
         expect(output.draft).toBeUndefined();
         expect(output.errors).toEqual([
-          `'${name}' is not an argument of create_${type}; send '${canonical}'.`,
+          `'${name}' is not an argument of create_${type} (retired in 6.0.0); send '${canonical}'.`,
         ]);
       }
     );
@@ -381,8 +381,8 @@ describe('creation authoring contract drift guard', () => {
         chainSteps: [],
       });
       expect(output.errors).toEqual([
-        "'systemMessage' is not an argument of create_prompt; send 'system_message'.",
-        "'chainSteps' is not an argument of create_prompt; send 'chain_steps'.",
+        "'systemMessage' is not an argument of create_prompt (retired in 6.0.0); send 'system_message'.",
+        "'chainSteps' is not an argument of create_prompt (retired in 6.0.0); send 'chain_steps'.",
       ]);
     });
 

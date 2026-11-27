@@ -23,12 +23,15 @@ CREATE_FIELDS = (
     "calibration_suite_id",
 )
 REFUSED_NAMES = {"enforcementMode": "enforcement_mode"}
+# The release that began refusing REFUSED_NAMES: `refusedIn` of the ledger entry
+# create-gate-camel-case-argument (server/tooling/contracts/registries/retirements.json).
+RETIRED_IN = "6.0.0"
 
 
 def refusals(data: dict[str, Any]) -> list[str]:
     """One line per camelCase name received: the name is refused and the snake_case one is shown."""
     return [
-        f"'{name}' is not an argument of create_gate; send '{canonical}'."
+        f"'{name}' is not an argument of create_gate (retired in {RETIRED_IN}); send '{canonical}'."
         for name, canonical in REFUSED_NAMES.items()
         if name in data
     ]
