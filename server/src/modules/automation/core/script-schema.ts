@@ -17,8 +17,10 @@
 
 import { z } from 'zod/v4';
 
+import type { RetirementNotice } from '#shared/utils/retirement-notice.js';
+
 import { SUPPORTED_RUNTIMES } from '#shared/types/automation.js';
-import { retirementNotice, type RetirementNotice } from '#shared/utils/retirement-notice.js';
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 
 /** The refusal sentence for a retired field, composed from its ledger entry. */
 function retiredFieldRefusal(notice: RetirementNotice): string {
@@ -51,7 +53,7 @@ function retiredField(notice: RetirementNotice): z.ZodOptional<z.ZodNever> {
 export const TriggerTypeSchema = z.enum(['schema_match', 'explicit', 'always', 'never'], {
   error: (issue) =>
     issue.input === 'parameter_match'
-      ? retiredFieldRefusal(retirementNotice('script-tool-trigger-parameter-match'))
+      ? retiredFieldRefusal(retirementNotices.scriptToolTriggerParameterMatch)
       : undefined,
 });
 
@@ -101,8 +103,8 @@ export const ExecutionConfigSchema = z
      * - valid: false → show errors, block execution
      */
     autoApproveOnValid: z.boolean().optional().default(false),
-    mode: retiredField(retirementNotice('script-tool-mode')),
-    confidence: retiredField(retirementNotice('script-tool-confidence')),
+    mode: retiredField(retirementNotices.scriptToolMode),
+    confidence: retiredField(retirementNotices.scriptToolConfidence),
   })
   .optional();
 

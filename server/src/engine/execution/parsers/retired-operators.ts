@@ -5,15 +5,15 @@
  * gate operator). `UnifiedCommandParser.parseCommand` calls both beside the reserved-operator and
  * gate-text refusals, on the command the strategies would parse, so a refused spelling never
  * reaches a strategy. Each refusal takes its wording from the retirement ledger through
- * `retirementNotice`, so the replacement is written once.
+ * its generated projection, so the replacement is written once.
  */
 
 import { findSigilOperatorsOutsideQuotes, isPositionInsideQuotes } from './parser-utils.js';
 
 import type { FrameworkIdLookup } from './symbolic-operator-parser.js';
 
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 import { ValidationError } from '#shared/utils/index.js';
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
 
 /**
  * `@<id>` where `^<id>` would be read as the framework operator: at the start of the command,
@@ -46,7 +46,7 @@ export function rejectAtFrameworkSigil(
     isRegisteredFramework(match.frameworkId.toUpperCase())
   );
   if (refused === undefined) return;
-  const notice = retirementNotice('command-framework-at-sigil');
+  const notice = retirementNotices.commandFrameworkAtSigil;
   throw new ValidationError(
     `Refused \`@${refused.frameworkId}\`: ${notice.retired} was retired in ${notice.refusedIn}. ` +
       `Use ${notice.replacement}: \`^${refused.frameworkId}\`.`
@@ -58,7 +58,7 @@ export function rejectEqualsGateOperator(command: string): void {
   for (const match of command.matchAll(EQUALS_GATE_OPERATOR)) {
     if (isPositionInsideQuotes(command, match.index)) continue;
     const typed = match[0].trim();
-    const notice = retirementNotice('command-gate-equals-operator');
+    const notice = retirementNotices.commandGateEqualsOperator;
     throw new ValidationError(
       `Refused \`${typed}\`: ${notice.retired} was retired in ${notice.refusedIn}. ` +
         `Use ${notice.replacement}: \`${typed.replace(/^=\s*/, ':: ')}\`.`

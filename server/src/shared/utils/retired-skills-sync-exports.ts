@@ -11,7 +11,7 @@
  * Pure: it reads a parsed document and returns text.
  */
 
-import { retirementNotice } from './retirement-notice.js';
+import * as retirementNotices from './_generated/retirement-notices.js';
 
 const REGISTRATIONS_EXAMPLE = [
   '  registrations:',
@@ -34,7 +34,7 @@ export function retiredSkillsSyncExportsRefusal(
   parsed: unknown
 ): string | undefined {
   if (!isRecord(parsed) || !Object.hasOwn(parsed, 'exports')) return undefined;
-  const notice = retirementNotice('skills-sync-exports-list');
+  const notice = retirementNotices.skillsSyncExportsList;
   return [
     `${configPath} carries ${notice.retired}, which is refused since ${notice.refusedIn}.`,
     `Remove the "exports" key and use ${notice.replacement}:`,

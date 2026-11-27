@@ -110,7 +110,7 @@ repo/
 | `npm run test:integration`                  | Integration tests only                                                          |
 | `npm run test:coverage`                     | Coverage report (target: >80%)                                                  |
 | `npm run generate:contracts`                | Regenerate MCP schemas from contracts                                           |
-| `npm run generate:retirements-doc`          | Regenerate `docs/reference/upgrading.md` from the retirement ledger             |
+| `npm run generate:retirements-doc`          | Regenerate the upgrade page and the runtime projection from the ledger          |
 | `npm run validate:retirements`              | Check the retirement ledger against its refusals, tests, docs and page          |
 | `npm run start:stdio` / `start:development` | STDIO / Streamable HTTP for manual testing                                      |
 
@@ -244,22 +244,25 @@ one is a breaking change and ships in a major release. The steps:
    what replaces it, `refusedIn` (the release that begins the refusal), `forgetAfter` (the date
    after which the refusal itself is deleted) and a `docPattern` no user-facing text may match, or
    `null` with a `docPatternReason`.
-2. Make the boundary that read the spelling refuse it, composing its message from
-   `retirementNotice('<id>')` (`server/src/shared/utils/retirement-notice.ts`), so the replacement
-   is written once.
+2. Run `npm run generate:retirements-doc`, then make the boundary that read the spelling refuse
+   it, composing its message from the entry's member of the generated projection
+   (`server/src/shared/utils/_generated/retirement-notices.ts`): import the module as a namespace
+   and read `<namespace>.<idInCamelCase>`, so the replacement is written once and each bundle
+   carries only the entries it reads.
 3. Add a driver for the id to `DRIVERS` in
    `server/tests/unit/retirements/retirement-refusals.test.ts`; it feeds the old spelling to the
    real boundary and reads the refusal.
 4. Delete the code path that accepted the spelling and every mention of it in docs and shipped
    text. Guides describe the current form only.
-5. Run `npm run generate:retirements-doc` and commit `docs/reference/upgrading.md`, the one page
-   where a user reads the old name.
+5. Run `npm run generate:retirements-doc` again if the entry changed, and commit
+   `docs/reference/upgrading.md`, the one page where a user reads the old name, and
+   `server/src/shared/utils/_generated/retirement-notices.ts`, the projection the product reads.
 
 `npm run validate:retirements` (inside `validate:all`) fails an entry with no refusal site or no
-driver, a `retirementNotice` call naming no entry, a user-facing line matching a `docPattern`, and
-an upgrade page that differs from what the ledger renders. It also fails wording that describes a
-form as old yet accepted, in user-facing text and in the strings `server/src`, `cli/src` and
-`hooks/` show; the phrases, and the few dated exemptions for forms not yet retired, are data in
+driver, a read of the projection naming no entry, a user-facing line matching a `docPattern`, and
+an upgrade page or projection that differs from what the ledger renders. It also fails wording
+that describes a form as old yet accepted, in user-facing text and in the strings `server/src`,
+`cli/src` and `hooks/` show; the phrases, and the few dated exemptions for forms not yet retired, are data in
 `server/scripts/retirement-wording.json`, and an exemption whose line is gone fails too. `npm run retirements:list` prints each entry with its dates and its refusal
 sites.
 

@@ -25,6 +25,7 @@ import {
   describeRetiredRootLayout,
   findRetiredRootFolders,
 } from '#cli-shared/retired-root-layout.js';
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 import {
   configFileFormat,
   findWorkspaceConfigFiles,
@@ -41,7 +42,6 @@ import {
   type PathSetting,
 } from '#shared/utils/path-setting.js';
 import { deriveProjectDir } from '#shared/utils/project-scope.js';
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
 import {
   RUNTIME_STATE_DIR_NAME,
   STATE_DB_FILE_NAME,
@@ -374,7 +374,7 @@ export class PathResolver {
   assertUsablePathSettings(): void {
     const removedResourcesPath = process.env['MCP_RESOURCES_PATH'];
     if (removedResourcesPath !== undefined && removedResourcesPath !== '') {
-      const notice = retirementNotice('env-mcp-resources-path');
+      const notice = retirementNotices.envMcpResourcesPath;
       throw new PathSettingError(
         [
           `Refusing to start: ${notice.retired} is no longer read (retired in ${notice.refusedIn}).`,

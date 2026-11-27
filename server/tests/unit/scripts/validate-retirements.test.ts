@@ -15,6 +15,12 @@ import { fileURLToPath } from 'node:url';
 
 import { renderUpgradingPage, UPGRADING_PAGE } from '../../../scripts/generate-retirements-doc.js';
 import { expiryOutcomes } from '../../../scripts/lib/retirement-expiry.js';
+import { listRetirements } from '../../../scripts/lib/retirement-ledger.js';
+import {
+  projectionMember,
+  renderRetirementProjection,
+  RETIREMENT_PROJECTION,
+} from '../../../scripts/lib/retirement-projection.js';
 import {
   findTypeScriptStrings,
   loadWordingRules,
@@ -29,7 +35,6 @@ import {
   scanRefusalSites,
   scanUserFacingText,
 } from '../../../scripts/validate-retirements.js';
-import { listRetirements } from '../../../src/shared/utils/retirement-notice.js';
 
 import type { RetirementCheckInput } from '../../../scripts/validate-retirements.js';
 
@@ -48,6 +53,8 @@ const OTHER = {
   docPattern: null,
 };
 const PAGE = '# Upgrading\n\nplanted page\n';
+const PROJECTION = 'export const plantedEntry = {};\n';
+const PROJECTION_FILE = `server/${RETIREMENT_PROJECTION}`;
 const PHRASES = loadWordingRules(REPO_ROOT).phrases;
 const TWO_STATES = 'The product has two states for a spelling, accepted or refused';
 
@@ -67,8 +74,8 @@ function clean(overrides: Partial<RetirementCheckInput> = {}): RetirementCheckIn
   return {
     entries: [ENTRY, OTHER],
     sites: [
-      { id: ENTRY.id, file: 'server/src/a.ts', line: 3 },
-      { id: OTHER.id, file: 'cli/src/b.ts', line: 9 },
+      { member: 'plantedEntry', file: 'server/src/a.ts', line: 3 },
+      { member: 'otherEntry', file: 'cli/src/b.ts', line: 9 },
     ],
     driverIds: [ENTRY.id, OTHER.id],
     texts: [
@@ -78,6 +85,8 @@ function clean(overrides: Partial<RetirementCheckInput> = {}): RetirementCheckIn
     wording: { phrases: PHRASES, exemptions: [] },
     expectedPage: PAGE,
     upgradingPage: PAGE,
+    expectedProjection: PROJECTION,
+    projection: PROJECTION,
     today: '2026-11-27',
     packageVersion: '6.0.0',
     ...overrides,
@@ -96,46 +105,56 @@ describe('validate:retirements', () => {
   describe('check 1: entries and refusal sites', () => {
     it('fails an entry no site refuses, naming it', () => {
       const failures = runRetirementChecks(
-        clean({ sites: [{ id: OTHER.id, file: 'cli/src/b.ts', line: 9 }] })
+        clean({ sites: [{ member: 'otherEntry', file: 'cli/src/b.ts', line: 9 }] })
       ).failures;
 
       expect(failures).toHaveLength(1);
       expect(failures[0]).toMatchObject({ check: 1, subject: ENTRY.id });
-      expect(failures[0]?.message).toContain(`retirementNotice('${ENTRY.id}')`);
+      expect(failures[0]?.message).toContain('no refusal site reads plantedEntry');
     });
 
-    it('fails a site whose id names no entry, naming the id and the site', () => {
-      const sites = [...clean().sites, { id: 'unknown-entry', file: 'server/src/c.ts', line: 12 }];
+    it('fails a site whose member names no entry, naming the member and the site', () => {
+      const sites = [
+        ...clean().sites,
+        { member: 'unknownEntry', file: 'server/src/c.ts', line: 12 },
+      ];
       const messages = failureMessages(clean({ sites }));
 
       expect(messages).toEqual([
-        "server/src/c.ts:12: retirementNotice('unknown-entry') names no entry in retirements.json.",
+        'server/src/c.ts:12: unknownEntry names no entry in retirements.json.',
       ]);
     });
 
-    it('fails a site that passes a non-literal id', () => {
-      const sites = [...clean().sites, { id: null, file: 'server/src/d.ts', line: 4 }];
+    it('fails a site that names no member', () => {
+      const sites = [...clean().sites, { member: null, file: 'server/src/d.ts', line: 4 }];
 
       expect(failureMessages(clean({ sites }))).toEqual([
-        'server/src/d.ts:4: retirementNotice() is called without a string-literal id, which no entry can be joined to.',
+        'server/src/d.ts:4: the retirement projection is used without naming one member, which no entry can be joined to. Import it as a namespace and read the entry by name.',
       ]);
     });
 
-    it('reads calls from the syntax tree: a commented-out call and a quoted id are not sites', () => {
+    it('reads uses from the syntax tree: a commented-out read and a quoted name are not sites', () => {
       const text = [
-        "import { retirementNotice } from '#shared/utils/retirement-notice.js';",
-        "// retirementNotice('in-a-line-comment');",
-        "/* retirementNotice('in-a-block-comment'); */",
-        'const prose = "call retirementNotice(\'in-a-string\') at the boundary";',
-        "const notice = retirementNotice('live-call');",
-        'const dynamic = retirementNotice(idFromSomewhere);',
-        "const viaNamespace = ledger.retirementNotice('namespaced-call');",
+        "import * as notices from '#shared/utils/_generated/retirement-notices.js';",
+        '// notices.inALineComment;',
+        '/* notices.inABlockComment; */',
+        'const prose = "read notices.inAString at the boundary";',
+        'const notice = notices.liveRead;',
+        'const dynamic = notices[idFromSomewhere];',
+        "const quoted = notices['quotedRead'];",
+        'const whole = describe(notices);',
+        "import { namedImport } from './_generated/retirement-notices.js';",
+        "export * from '../utils/_generated/retirement-notices.js';",
+        'const unrelated = other.liveRead;',
       ].join('\n');
 
       expect(findRetirementSites('server/src/x.ts', text)).toEqual([
-        { id: 'live-call', file: 'server/src/x.ts', line: 5 },
-        { id: null, file: 'server/src/x.ts', line: 6 },
-        { id: 'namespaced-call', file: 'server/src/x.ts', line: 7 },
+        { member: 'liveRead', file: 'server/src/x.ts', line: 5 },
+        { member: null, file: 'server/src/x.ts', line: 6 },
+        { member: 'quotedRead', file: 'server/src/x.ts', line: 7 },
+        { member: null, file: 'server/src/x.ts', line: 8 },
+        { member: null, file: 'server/src/x.ts', line: 9 },
+        { member: null, file: 'server/src/x.ts', line: 10 },
       ]);
     });
   });
@@ -286,6 +305,48 @@ describe('validate:retirements', () => {
       expect(runRetirementChecks(clean({ upgradingPage: null })).failures).toMatchObject([
         { check: 5, subject: UPGRADING_PAGE },
       ]);
+    });
+
+    it('fails a hand-edited runtime projection, naming the file and the command to run', () => {
+      const failures = runRetirementChecks(
+        clean({ projection: PROJECTION.replace('plantedEntry', 'handEdited') })
+      ).failures;
+
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toMatchObject({ check: 5, subject: PROJECTION_FILE });
+      expect(failures[0]?.message).toContain('npm --prefix server run generate:retirements-doc');
+    });
+
+    it('fails a missing runtime projection', () => {
+      expect(runRetirementChecks(clean({ projection: null })).failures).toMatchObject([
+        { check: 5, subject: PROJECTION_FILE },
+      ]);
+    });
+
+    it('fails a projection that lacks a ledger entry, or holds one the ledger does not', () => {
+      const entries = listRetirements();
+      const current = renderRetirementProjection(entries);
+      const missing = renderRetirementProjection(entries.slice(1));
+      const extra = renderRetirementProjection([
+        ...entries,
+        { ...entries[0]!, id: 'not-in-the-ledger' },
+      ]);
+
+      for (const onDisk of [missing, extra]) {
+        expect(
+          runRetirementChecks(clean({ expectedProjection: current, projection: onDisk })).failures
+        ).toMatchObject([{ check: 5, subject: PROJECTION_FILE }]);
+      }
+    });
+
+    it('renders one exported constant per ledger entry, named after its id', () => {
+      const projection = renderRetirementProjection(listRetirements());
+      const exported = [...projection.matchAll(/^export const (\w+): RetirementNotice/gm)].map(
+        (match) => match[1]
+      );
+
+      expect(exported).toHaveLength(listRetirements().length);
+      expect(exported).toContain('configFileUnversioned');
     });
 
     it('renders newest refusal first, then by spelling, with one row per entry', () => {
@@ -528,7 +589,7 @@ describe('validate:retirements', () => {
     });
   });
 
-  it('passes the live tree: a site and a driver per entry, no retired name in user-facing text, the page current', () => {
+  it('passes the live tree: a site and a driver per entry, no retired name in user-facing text, the page and the projection current', () => {
     const entries = listRetirements();
     const sites = scanRefusalSites();
     const driverIds = findDriverIds(readFileSync(path.join(REPO_ROOT, DRIVER_FILE), 'utf8'));
@@ -536,8 +597,8 @@ describe('validate:retirements', () => {
     const codeStrings = scanCodeStrings(REPO_ROOT);
 
     // The scans observed something: a site per entry and one driver per entry.
-    expect(new Set(sites.map((site) => site.id))).toEqual(
-      new Set(entries.map((entry) => entry.id))
+    expect(new Set(sites.map((site) => site.member))).toEqual(
+      new Set(entries.map((entry) => projectionMember(entry.id)))
     );
     expect(texts.map((text) => text.file)).toEqual(
       expect.arrayContaining(['README.md', 'docs/reference/configuration.md'])
@@ -556,6 +617,8 @@ describe('validate:retirements', () => {
         wording: loadWordingRules(REPO_ROOT),
         expectedPage: renderUpgradingPage(entries),
         upgradingPage: readFileSync(path.join(REPO_ROOT, UPGRADING_PAGE), 'utf8'),
+        expectedProjection: renderRetirementProjection(entries),
+        projection: readFileSync(path.join(REPO_ROOT, 'server', RETIREMENT_PROJECTION), 'utf8'),
         today: '2026-11-27',
         packageVersion: '5.1.1',
       }).failures

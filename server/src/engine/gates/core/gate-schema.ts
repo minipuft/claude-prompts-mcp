@@ -53,12 +53,12 @@ import type {
   SemanticResultDomain,
 } from '#shared/types/gate-evaluation.js';
 
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 import { refuseUndeclaredKey, refuseUnionMismatch } from '#shared/utils/nested-key-refusal.js';
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
 
 /** The type error a non-array `shell_command` reads: the shape, the reason and the fix. */
 function describeShellCommandTypeRefusal(): string {
-  const notice = retirementNotice('gate-shell-command-string');
+  const notice = retirementNotices.gateShellCommandString;
   return (
     `shell_command must be ${notice.replacement}; ${notice.retired} is no longer accepted ` +
     `(retired in ${notice.refusedIn}): it was handed to \`sh -c\`, so the shell parsed whatever ` +
@@ -336,7 +336,7 @@ export const GatePassCriteriaSchema = z
         criteria.shell_command.length === 0 ||
         isBlank(criteria.shell_command[0]))
     ) {
-      const notice = retirementNotice('gate-shell-command-string');
+      const notice = retirementNotices.gateShellCommandString;
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['shell_command'],
@@ -759,7 +759,7 @@ export function validateGateSchema(data: unknown, expectedId?: string): GateSche
     const rawCriterion = criterion as Record<string, unknown>;
     for (const field of REJECTED_CRITERIA_FIELDS) {
       if (rawCriterion[field] !== undefined) {
-        const notice = retirementNotice('gate-criteria-pattern-fields');
+        const notice = retirementNotices.gateCriteriaPatternFields;
         errors.push(
           `pass_criteria[${index}].${field} is not evaluated by any runner and is no longer ` +
             `accepted (retired in ${notice.refusedIn}); use ${notice.replacement} instead`

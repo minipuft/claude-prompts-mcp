@@ -25,7 +25,7 @@ import { join } from 'node:path';
 
 import { discoverCategoryDirectories } from '#modules/prompts/category-maintenance.js';
 import { hasYamlPrompts } from '#modules/prompts/yaml-prompt-loader.js';
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 import { discoverNestedYamlDirectories } from '#shared/utils/yaml/index.js';
 
 /** The resource types that had a folder at the workspace root. */
@@ -43,21 +43,19 @@ function holdsScriptTool(dir: string): boolean {
   }
 }
 
+/** The definition file each nested-YAML type's loader discovers one or two levels down. */
+const DEFINITION_FILES = {
+  gates: 'gate.yaml',
+  frameworks: 'framework.yaml',
+  styles: 'style.yaml',
+} as const;
+
 function holdsResourceDefinition(type: RootFolderType, dir: string): boolean {
-  switch (type) {
-    case 'prompts':
-      return discoverCategoryDirectories(dir).some((category) =>
-        hasYamlPrompts(join(dir, category))
-      );
-    case 'gates':
-      return discoverNestedYamlDirectories(dir, 'gate.yaml').length > 0;
-    case 'frameworks':
-      return discoverNestedYamlDirectories(dir, 'framework.yaml').length > 0;
-    case 'styles':
-      return discoverNestedYamlDirectories(dir, 'style.yaml').length > 0;
-    case 'scripts':
-      return holdsScriptTool(dir);
+  if (type === 'prompts') {
+    return discoverCategoryDirectories(dir).some((category) => hasYamlPrompts(join(dir, category)));
   }
+  if (type === 'scripts') return holdsScriptTool(dir);
+  return discoverNestedYamlDirectories(dir, DEFINITION_FILES[type]).length > 0;
 }
 
 /** The resource types whose folder at `workspace`'s root holds at least one resource definition. */
@@ -74,7 +72,7 @@ export function describeRetiredRootLayout(
   folders: readonly RootFolderType[],
   lead: string
 ): string {
-  const notice = retirementNotice('folder-layout-workspace-root');
+  const notice = retirementNotices.folderLayoutWorkspaceRoot;
   const held = folders.map((type) => join(workspace, type)).join(', ');
   return [
     `${lead} ${notice.retired} are no longer read (retired in ${notice.refusedIn}); ${workspace} holds resources in ${held}.`,

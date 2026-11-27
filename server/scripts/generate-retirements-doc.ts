@@ -18,7 +18,8 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { listRetirements, type RetirementEntry } from '../src/shared/utils/retirement-notice.js';
+import { listRetirements, type RetirementEntry } from './lib/retirement-ledger.js';
+import { renderRetirementProjection, RETIREMENT_PROJECTION } from './lib/retirement-projection.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -131,9 +132,16 @@ export function renderUpgradingPage(entries: readonly RetirementEntry[]): string
 }
 
 function main(): void {
-  const page = renderUpgradingPage(listRetirements());
-  writeFileSync(path.join(REPO_ROOT, UPGRADING_PAGE), page, 'utf8');
-  console.log(`✓ Wrote ${UPGRADING_PAGE} (${listRetirements().length} entries)`);
+  const entries = listRetirements();
+  writeFileSync(path.join(REPO_ROOT, UPGRADING_PAGE), renderUpgradingPage(entries), 'utf8');
+  writeFileSync(
+    path.join(REPO_ROOT, 'server', RETIREMENT_PROJECTION),
+    renderRetirementProjection(entries),
+    'utf8'
+  );
+  console.log(
+    `✓ Wrote ${UPGRADING_PAGE} and server/${RETIREMENT_PROJECTION} (${entries.length} entries)`
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

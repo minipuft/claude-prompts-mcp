@@ -64,10 +64,10 @@ import {
   type ConfigManager,
   type GateSystemSettings,
 } from '#shared/types/index.js';
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { PathSettingError } from '#shared/utils/path-setting.js';
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
 import { unversionedConfigFileRefusal } from '#shared/utils/unversioned-config-file.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
@@ -595,7 +595,7 @@ function assertServerTransportIsStdio(
   const transportValue = (server as Record<string, unknown>)['transport'];
   if (transportValue === undefined || transportValue === 'stdio') return;
 
-  const notice = retirementNotice('config-server-transport');
+  const notice = retirementNotices.configServerTransport;
   throw new TransportConfigError(
     `${configPath} sets "${notice.retired}": ${JSON.stringify(transportValue)}, but transport is ` +
       `a launch-time-only setting — config can no longer select it (retired in ` +
@@ -622,7 +622,7 @@ function assertConfigFileIsVersioned(rawConfig: Record<string, unknown>, configP
  */
 function refuseRetiredConfigKeys(rawConfig: Record<string, unknown>, configPath: string): void {
   if ('analysis' in rawConfig) {
-    const notice = retirementNotice('config-analysis-section');
+    const notice = retirementNotices.configAnalysisSection;
     refuseConfigSetting(
       configPath,
       `sets "${notice.retired}", a section no longer read (retired in ${notice.refusedIn})`,
@@ -631,7 +631,7 @@ function refuseRetiredConfigKeys(rawConfig: Record<string, unknown>, configPath:
   }
   const server = rawConfig['server'];
   if (isConfigObject(server) && 'transport' in server) {
-    const notice = retirementNotice('config-server-transport');
+    const notice = retirementNotices.configServerTransport;
     refuseConfigSetting(
       configPath,
       `sets "${notice.retired}": ${JSON.stringify(server['transport'])}, a key no longer read ` +

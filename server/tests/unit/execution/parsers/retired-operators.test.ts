@@ -1,7 +1,7 @@
 import { describe, expect, jest, test } from '@jest/globals';
 
 import { UnifiedCommandParser } from '../../../../src/engine/execution/parsers/command-parser.js';
-import { retirementNotice } from '../../../../src/shared/utils/retirement-notice.js';
+import * as retirementNotices from '../../../../src/shared/utils/_generated/retirement-notices.js';
 
 import type { ConvertedPrompt } from '../../../../src/engine/execution/types.js';
 
@@ -26,8 +26,8 @@ const prompts = ['analyze', 'summarize', 'mail'].map((id) => ({
 /** Knows CAGEERF and REACT, as `frameworkManager.has` would for the shipped frameworks. */
 const parser = new UnifiedCommandParser(logger, (id) => id === 'CAGEERF' || id === 'REACT');
 
-const AT_SIGIL = retirementNotice('command-framework-at-sigil');
-const EQUALS_GATE = retirementNotice('command-gate-equals-operator');
+const AT_SIGIL = retirementNotices.commandFrameworkAtSigil;
+const EQUALS_GATE = retirementNotices.commandGateEqualsOperator;
 
 describe('the `@` framework sigil is refused, naming `^`', () => {
   test.each([

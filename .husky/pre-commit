@@ -38,6 +38,11 @@ generator_for_artifact() {
       GEN_SOURCE_RE='^server/(scripts/generate-config-schema\.ts|src/shared/types/config-file\.ts)$'
       GEN_ARTIFACT_PATHS='server/config.schema.json server/src/cli-shared/_generated/config-keys.ts server/src/cli-shared/_generated/config-template.ts'
       ;;
+    server/src/shared/utils/_generated/retirement-notices.ts)
+      GEN_NPM_SCRIPT='generate:retirements-doc'
+      GEN_SOURCE_RE='^server/(scripts/generate-retirements-doc\.ts|scripts/lib/retirement-(ledger|projection)\.ts|tooling/contracts/registries/retirements\.json)$'
+      GEN_ARTIFACT_PATHS='server/src/shared/utils/_generated/retirement-notices.ts docs/reference/upgrading.md'
+      ;;
     *)
       return 1
       ;;
@@ -70,6 +75,11 @@ regen_generator_if_source_staged \
   'generate:config-schema' \
   '^server/(scripts/generate-config-schema\.ts|src/shared/types/config-file\.ts)$' \
   'server/config.schema.json server/src/cli-shared/_generated/config-keys.ts server/src/cli-shared/_generated/config-template.ts'
+
+regen_generator_if_source_staged \
+  'generate:retirements-doc' \
+  '^server/(scripts/generate-retirements-doc\.ts|scripts/lib/retirement-(ledger|projection)\.ts|tooling/contracts/registries/retirements\.json)$' \
+  'server/src/shared/utils/_generated/retirement-notices.ts docs/reference/upgrading.md'
 
 # Prevent direct edits to generated files (without a justifying source change).
 # Exception 1: deletions are allowed if the source no longer exists (feature removal).

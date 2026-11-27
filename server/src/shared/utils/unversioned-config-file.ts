@@ -17,25 +17,11 @@
 
 import path from 'node:path';
 
-import { retirementNotice } from './retirement-notice.js';
+import * as retirementNotices from './_generated/retirement-notices.js';
 import { DEFAULT_PROMPTS_CONFIG } from '../types/core-config.js';
 
-/** A pre-5.0 key whose value lives under another key at 5.0. */
-interface MovedKey {
-  readonly from: string;
-  readonly to: string;
-  /** The pre-5.0 key held `"on"`/`"off"` where the 5.0 key holds a boolean. */
-  readonly onOff: boolean;
-}
-
-/** A pre-5.0 key 5.0 has no place for, with what to do instead. */
-interface RemovedKey {
-  readonly key: string;
-  /** Read when the message is composed, so ledger text is resolved at the refusal, not at import. */
-  readonly instead: () => string;
-  /** When present, the key is listed only for a value this returns true for. */
-  readonly listedFor?: (value: unknown, configPath: string) => boolean;
-}
+/** A pre-5.0 key and the 5.0 key its value lives under. */
+type MovedKey = readonly [from: string, to: string];
 
 /**
  * A `prompts.directory` naming the default says nothing and a 5.0 file may carry it; any other
@@ -47,69 +33,77 @@ function namesOtherPromptsDirectory(value: unknown, configPath: string): boolean
   return path.resolve(dir, value) !== path.resolve(dir, DEFAULT_PROMPTS_CONFIG.directory);
 }
 
-const move = (from: string, to: string): MovedKey => ({ from, to, onOff: false });
-const onOff = (from: string, to: string): MovedKey => ({ from, to, onOff: true });
+/** `frameworks.<guidance>Frequency` and `...Target` moved under `frameworks.injection.<guidance>`. */
+const injectionMoves = (guidance: string): MovedKey[] =>
+  ['Frequency', 'Target'].map((setting) => [
+    `frameworks.${guidance}${setting}`,
+    `frameworks.injection.${guidance}.${setting.toLowerCase()}`,
+  ]);
 
+/** `advanced.sessions.<lifetime>` became `chainSessions.<lifetime>`. */
+const sessionMove = (lifetime: string): MovedKey => [
+  `advanced.sessions.${lifetime}`,
+  `chainSessions.${lifetime}`,
+];
+
+/**
+ * Keys whose value moved as it is, in the order the refusal lists them. The renames follow a few
+ * rules, so the table states each rule once over the names it applies to.
+ */
 const MOVED_KEYS: readonly MovedKey[] = [
-  move('frameworks.systemPromptFrequency', 'frameworks.injection.systemPrompt.frequency'),
-  move('frameworks.systemPromptTarget', 'frameworks.injection.systemPrompt.target'),
-  move('frameworks.gateGuidanceFrequency', 'frameworks.injection.gateGuidance.frequency'),
-  move('frameworks.gateGuidanceTarget', 'frameworks.injection.gateGuidance.target'),
-  move('frameworks.styleGuidance', 'frameworks.injection.styleGuidance.enabled'),
-  move('frameworks.styleGuidanceFrequency', 'frameworks.injection.styleGuidance.frequency'),
-  move('frameworks.styleGuidanceTarget', 'frameworks.injection.styleGuidance.target'),
-  move('advanced.sessions.timeoutMinutes', 'chainSessions.timeoutMinutes'),
-  move('advanced.sessions.reviewTimeoutMinutes', 'chainSessions.reviewTimeoutMinutes'),
-  move('advanced.sessions.cleanupIntervalMinutes', 'chainSessions.cleanupIntervalMinutes'),
-  move('versioning.max_versions', 'versioning.maxVersions'),
-  move('versioning.auto_version', 'versioning.autoVersion'),
-  // `telemetry.mode`, `phaseGuards.mode` and `identity.mode` are live 5.0 keys and are absent here.
-  onOff('gates.mode', 'gates.enabled'),
-  onOff('frameworks.mode', 'frameworks.enabled'),
-  onOff('resources.mode', 'resources.registerWithMcp'),
-  onOff('resources.prompts.mode', 'resources.prompts.enabled'),
-  onOff('resources.gates.mode', 'resources.gates.enabled'),
-  onOff('resources.frameworks.mode', 'resources.frameworks.enabled'),
-  onOff('resources.observability.mode', 'resources.observability.enabled'),
-  onOff('resources.logs.mode', 'resources.logs.enabled'),
-  onOff('verification.isolation.mode', 'verification.isolation.enabled'),
-  onOff('versioning.mode', 'versioning.enabled'),
+  ...injectionMoves('systemPrompt'),
+  ...injectionMoves('gateGuidance'),
+  ['frameworks.styleGuidance', 'frameworks.injection.styleGuidance.enabled'],
+  ...injectionMoves('styleGuidance'),
+  ...['timeoutMinutes', 'reviewTimeoutMinutes', 'cleanupIntervalMinutes'].map(sessionMove),
+  ['versioning.max_versions', 'versioning.maxVersions'],
+  ['versioning.auto_version', 'versioning.autoVersion'],
 ];
 
-const NOTHING_REPLACES_IT = (): string => 'remove it; nothing reads it and nothing replaces it';
+/** An on/off `<section>.mode` became the boolean `<section>.enabled`. */
+const modeToEnabled = (section: string): MovedKey => [`${section}.mode`, `${section}.enabled`];
 
-const REMOVED_KEYS: readonly RemovedKey[] = [
-  { key: 'server.version', instead: () => 'remove it; the server reports its own version' },
-  {
-    key: 'server.transport',
-    instead: () =>
-      'remove it; stdio is the default, and another transport is chosen at launch with ' +
-      retirementNotice('config-server-transport').replacement,
-  },
-  { key: 'gates.enforcePendingVerdict', instead: NOTHING_REPLACES_IT },
-  { key: 'resources.prompts.defaultRegistration', instead: NOTHING_REPLACES_IT },
-  {
-    key: 'analysis',
-    instead: () =>
-      `remove the section; use ${retirementNotice('config-analysis-section').replacement}`,
-  },
-  {
-    key: 'gates.directory',
-    instead: () =>
-      'remove it; gates are read from the gates/ folder of each location in "paths.resources"',
-  },
-  {
-    key: 'prompts.directory',
-    instead: () => `remove it; use ${retirementNotice('config-prompts-directory').replacement}`,
-    listedFor: namesOtherPromptsDirectory,
-  },
-  {
-    key: 'advanced',
-    instead: () =>
-      'remove the section; 5.0 has no "advanced" section, and chain session lifetimes live ' +
-      'under "chainSessions"',
-  },
+/**
+ * Keys that held `"on"`/`"off"` where the 5.0 key holds a boolean, listed after the moved keys.
+ * `telemetry.mode`, `phaseGuards.mode` and `identity.mode` are live 5.0 keys and are absent here.
+ */
+const ON_OFF_KEYS: readonly MovedKey[] = [
+  ...['gates', 'frameworks'].map(modeToEnabled),
+  ['resources.mode', 'resources.registerWithMcp'],
+  ...[
+    'resources.prompts',
+    'resources.gates',
+    'resources.frameworks',
+    'resources.observability',
+    'resources.logs',
+    'verification.isolation',
+    'versioning',
+  ].map(modeToEnabled),
 ];
+
+const NOTHING_REPLACES_IT = 'remove it; nothing reads it and nothing replaces it';
+
+/** Each pre-5.0 key 5.0 has no place for, with what to do instead, in the order listed. */
+const REMOVED_KEYS: Readonly<Record<string, string>> = {
+  'server.version': 'remove it; the server reports its own version',
+  'server.transport':
+    'remove it; stdio is the default, and another transport is chosen at launch with ' +
+    retirementNotices.configServerTransport.replacement,
+  'gates.enforcePendingVerdict': NOTHING_REPLACES_IT,
+  'resources.prompts.defaultRegistration': NOTHING_REPLACES_IT,
+  analysis: `remove the section; use ${retirementNotices.configAnalysisSection.replacement}`,
+  'gates.directory':
+    'remove it; gates are read from the gates/ folder of each location in "paths.resources"',
+  'prompts.directory': `remove it; use ${retirementNotices.configPromptsDirectory.replacement}`,
+  advanced:
+    'remove the section; 5.0 has no "advanced" section, and chain session lifetimes live ' +
+    'under "chainSessions"',
+};
+
+/** A removed key is listed whenever the file carries it, except a default `prompts.directory`. */
+function isListed(key: string, value: unknown, configPath: string): boolean {
+  return key !== 'prompts.directory' || namesOtherPromptsDirectory(value, configPath);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -125,33 +119,40 @@ function readDotPath(root: Record<string, unknown>, key: string): { value: unkno
   return { value: current };
 }
 
-function describeMovedKey(raw: Record<string, unknown>, moved: MovedKey, value: unknown): string {
-  const prefix = `  - "${moved.from}"`;
-  if (readDotPath(raw, moved.to) !== undefined) {
-    return `${prefix}: remove it; "${moved.to}" is already set`;
+/** One moved key's line; `onOff` marks a key that held `"on"`/`"off"` for a 5.0 boolean. */
+function describeMovedKey(
+  raw: Record<string, unknown>,
+  [from, to]: MovedKey,
+  onOff: boolean,
+  value: unknown
+): string {
+  const prefix = `  - "${from}"`;
+  if (readDotPath(raw, to) !== undefined) {
+    return `${prefix}: remove it; "${to}" is already set`;
   }
-  if (!moved.onOff) return `${prefix}: move its value to "${moved.to}"`;
+  if (!onOff) return `${prefix}: move its value to "${to}"`;
   if (value === 'on' || value === 'off') {
-    return `${prefix}: ${JSON.stringify(value)} becomes "${moved.to}": ${String(value === 'on')}`;
+    return `${prefix}: ${JSON.stringify(value)} becomes "${to}": ${String(value === 'on')}`;
   }
-  return `${prefix}: replace it with "${moved.to}" set to true or false`;
+  return `${prefix}: replace it with "${to}" set to true or false`;
 }
 
-function isListed(removed: RemovedKey, found: { value: unknown }, configPath: string): boolean {
-  return removed.listedFor === undefined || removed.listedFor(found.value, configPath);
-}
-
-/** One line per pre-5.0 key `raw` carries, in table order: moved keys, then removed ones. */
+/** One line per pre-5.0 key `raw` carries, in table order: moved, on/off, then removed keys. */
 function describePre5Keys(raw: Record<string, unknown>, configPath: string): string[] {
   const lines: string[] = [];
-  for (const moved of MOVED_KEYS) {
-    const found = readDotPath(raw, moved.from);
-    if (found !== undefined) lines.push(describeMovedKey(raw, moved, found.value));
+  for (const [keys, onOff] of [
+    [MOVED_KEYS, false],
+    [ON_OFF_KEYS, true],
+  ] as const) {
+    for (const moved of keys) {
+      const found = readDotPath(raw, moved[0]);
+      if (found !== undefined) lines.push(describeMovedKey(raw, moved, onOff, found.value));
+    }
   }
-  for (const removed of REMOVED_KEYS) {
-    const found = readDotPath(raw, removed.key);
-    if (found !== undefined && isListed(removed, found, configPath)) {
-      lines.push(`  - "${removed.key}": ${removed.instead()}`);
+  for (const [key, instead] of Object.entries(REMOVED_KEYS)) {
+    const found = readDotPath(raw, key);
+    if (found !== undefined && isListed(key, found.value, configPath)) {
+      lines.push(`  - "${key}": ${instead}`);
     }
   }
   return lines;
@@ -167,7 +168,7 @@ function describePre5Keys(raw: Record<string, unknown>, configPath: string): str
  */
 export function unversionedConfigFileRefusal(configPath: string, raw: unknown): string | undefined {
   if (!isRecord(raw) || raw['version'] !== undefined) return undefined;
-  const notice = retirementNotice('config-file-unversioned');
+  const notice = retirementNotices.configFileUnversioned;
   const opening = `${configPath} is ${notice.retired}, which is refused since ${notice.refusedIn}.`;
   const lines = describePre5Keys(raw, configPath);
   if (lines.length === 0) {

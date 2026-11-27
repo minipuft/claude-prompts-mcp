@@ -18,7 +18,7 @@ import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-e
 import { ScriptToolDefinitionLoader } from '../../../src/modules/automation/core/script-definition-loader.js';
 import { runSkillsSyncCommand } from '../../../src/modules/skills-sync/service.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
-import { listRetirements } from '../../../src/shared/utils/retirement-notice.js';
+import { listRetirements } from '../../../scripts/lib/retirement-ledger.js';
 import { withResourceLocations } from '../../helpers/resource-locations.js';
 
 import type { ConvertedPrompt } from '../../../src/engine/execution/types.js';

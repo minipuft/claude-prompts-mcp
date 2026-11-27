@@ -1,15 +1,14 @@
 /**
- * The retirement ledger's shape is checked when it loads: each planted malformed document is
- * refused with the entry and the field named, a well-formed one parses, and an id with no entry
- * throws instead of producing half a sentence.
+ * The retirement ledger's shape is checked when the scripts load it: each planted malformed
+ * document is refused with the entry and the field named, and a well-formed one parses. The
+ * runtime projection the product reads holds exactly the ledger's entries, one member per id,
+ * each carrying the entry's own text.
  */
 import { describe, expect, it } from '@jest/globals';
 
-import {
-  listRetirements,
-  parseRetirementLedger,
-  retirementNotice,
-} from '../../../../src/shared/utils/retirement-notice.js';
+import { listRetirements, parseRetirementLedger } from '../../../scripts/lib/retirement-ledger.js';
+import { projectionMember } from '../../../scripts/lib/retirement-projection.js';
+import * as retirementNotices from '../../../src/shared/utils/_generated/retirement-notices.js';
 
 const VALID = {
   id: 'planted-entry',
@@ -64,21 +63,23 @@ describe('retirement ledger shape', () => {
   });
 });
 
-describe('retirementNotice', () => {
-  it('returns the retired spelling, its replacement and the refusing release of an entry', () => {
-    const entry = listRetirements()[0];
-    if (entry === undefined) throw new Error('the shipped ledger is empty');
-
-    expect(retirementNotice(entry.id)).toEqual({
-      retired: entry.retired,
-      replacement: entry.replacement,
-      refusedIn: entry.refusedIn,
-    });
+describe('the runtime projection', () => {
+  it('holds one member per ledger entry and nothing else', () => {
+    expect(Object.keys(retirementNotices).sort()).toEqual(
+      listRetirements()
+        .map((entry) => projectionMember(entry.id))
+        .sort()
+    );
   });
 
-  it('throws for an id the ledger does not hold', () => {
-    expect(() => retirementNotice('no-such-entry')).toThrow(
-      "retirementNotice: retirements.json has no entry 'no-such-entry'"
-    );
+  it("carries each entry's retired spelling, replacement and refusing release", () => {
+    const members: Record<string, unknown> = retirementNotices;
+    for (const entry of listRetirements()) {
+      expect(members[projectionMember(entry.id)]).toEqual({
+        retired: entry.retired,
+        replacement: entry.replacement,
+        refusedIn: entry.refusedIn,
+      });
+    }
   });
 });
