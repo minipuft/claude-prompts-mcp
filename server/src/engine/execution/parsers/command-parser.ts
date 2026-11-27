@@ -15,6 +15,7 @@
 import { tokenizeCommand } from './command-tokenizer.js';
 import { RESERVED_OPERATORS } from './operator-patterns.js';
 import { normalizeSymbolicPrefixes, readPromptSelector } from './parser-utils.js';
+import { rejectAtFrameworkSigil, rejectEqualsGateOperator } from './retired-operators.js';
 import {
   SymbolicCommandParser,
   createSymbolicCommandParser,
@@ -170,15 +171,17 @@ export class UnifiedCommandParser {
   private logger: Logger;
   private strategies: ParsingStrategy[];
   private symbolicParser: SymbolicCommandParser;
+  private readonly isRegisteredFramework: FrameworkIdLookup | undefined;
 
   /**
    * @param logger - Logger instance
    * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
-   *   ^framework operators (and the deprecated @framework spelling) it accepts are detected; any
-   *   other ^word or @word stays literal text.
+   *   ^framework operators it accepts are detected (any other ^word stays literal text), and an
+   *   @framework spelling of an id it accepts is refused.
    */
   constructor(logger: Logger, isRegisteredFramework?: FrameworkIdLookup) {
     this.logger = logger;
+    this.isRegisteredFramework = isRegisteredFramework;
     this.symbolicParser = createSymbolicCommandParser(logger, isRegisteredFramework);
     this.strategies = this.initializeStrategies();
     this.logger.debug(
@@ -435,21 +438,26 @@ export class UnifiedCommandParser {
   /**
    * Run the operator refusals on the text the strategies parse. For the JSON form that is the
    * decoded inner command: read off the JSON text, an escaped quote looked glued to every
-   * criterion and a reserved operator was never tokenized (R106).
+   * criterion and a reserved operator was never tokenized (R106). This is the one place a retired
+   * operator spelling is refused, for both transports and every strategy.
    */
   private rejectUnparseableOperators(command: string, tokens: TokenizedCommand): void {
     if (tokens.format !== 'json') {
-      rejectReservedOperators(tokens);
-      rejectEmptyGateText(command);
-      rejectQuoteInGateText(command);
+      this.rejectOperatorText(command, tokens);
       return;
     }
     const unwrapped = unwrapJsonCommand(command);
     if (unwrapped === null) return;
     const inner = this.extractModifier(unwrapped.command).command;
-    rejectReservedOperators(tokenizeCommand(inner));
-    rejectEmptyGateText(inner);
-    rejectQuoteInGateText(inner);
+    this.rejectOperatorText(inner, tokenizeCommand(inner));
+  }
+
+  private rejectOperatorText(command: string, tokens: TokenizedCommand): void {
+    rejectAtFrameworkSigil(command, this.isRegisteredFramework);
+    rejectEqualsGateOperator(command);
+    rejectReservedOperators(tokens);
+    rejectEmptyGateText(command);
+    rejectQuoteInGateText(command);
   }
 
   /**
@@ -718,7 +726,7 @@ export class UnifiedCommandParser {
  * Factory function to create unified command parser
  * @param logger - Logger instance
  * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
- *   ^framework operators (and the deprecated @framework spelling) it accepts are detected.
+ *   ^framework operators it accepts are detected, and an @framework spelling of one is refused.
  */
 export function createUnifiedCommandParser(
   logger: Logger,

@@ -13,7 +13,7 @@ import {
   writeProfileEntry,
 } from '../lib/profile-registry.js';
 import type { ProfileEntry, ProfileRegistry } from '../lib/profile-registry.js';
-import { resolveWorkspace } from '../lib/workspace.js';
+import { resolveWorkspace, retiredRootLayoutRefusal } from '../lib/workspace.js';
 
 type WorkspaceSubcommand = 'add' | 'remove' | 'list' | 'show' | 'use';
 
@@ -148,6 +148,9 @@ function workspaceShow({ options, registry }: WorkspaceContext): number {
   const found = requireEntry(registry, options, options.positionals[0]);
   if (typeof found === 'number') return found;
 
+  const refusal = retiredRootLayoutRefusal(found.folder);
+  if (refusal !== undefined) return fail(options, refusal);
+
   const summary = summarizeProfile(found.folder);
   output(
     {
@@ -165,6 +168,9 @@ function workspaceShow({ options, registry }: WorkspaceContext): number {
 function workspaceUse({ options, registry }: WorkspaceContext): number {
   const found = requireEntry(registry, options, options.positionals[0]);
   if (typeof found === 'number') return found;
+
+  const refusal = retiredRootLayoutRefusal(found.folder);
+  if (refusal !== undefined) return fail(options, refusal);
 
   const line = `MCP_WORKSPACE=${found.folder}`;
   const hint =

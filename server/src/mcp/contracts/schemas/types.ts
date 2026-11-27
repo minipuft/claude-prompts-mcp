@@ -17,8 +17,6 @@ export const parameterStatusSchema = z.enum([
   'needs-validation',
 ]);
 
-export const compatibilitySchema = z.enum(['canonical', 'legacy', 'deprecated']);
-
 export const parameterSchema = z.object({
   name: z.string().min(1),
   type: z.string().min(1), // e.g., "string", "enum[auto|single|chain]", "boolean"
@@ -26,7 +24,6 @@ export const parameterSchema = z.object({
   required: z.boolean().optional(),
   default: z.unknown().optional(),
   status: parameterStatusSchema.default('working'),
-  compatibility: compatibilitySchema.default('canonical'),
   examples: z.array(z.string()).optional(),
   notes: z.array(z.string()).optional(),
   enum: z.array(z.string()).optional(), // For enum types with explicit values

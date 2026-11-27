@@ -23,7 +23,6 @@ import type { Logger } from '../../../../src/infra/logging/index.js';
  * anonymous/canonical criteria attach to the step that carried it. A named form registers once on
  * the global namedInlineGates path, and since R44 (P6.99) its id also joins the criteria of the
  * segment that carried it, so that segment's node binds it; `verify:` stays command-level (R32).
- * The deprecated `=` form is untouched.
  */
 describe('S9 — inline gate token attribution in symbolic chains', () => {
   let parser: ReturnType<typeof createSymbolicCommandParser>;
@@ -121,25 +120,16 @@ describe('S9 — inline gate token attribution in symbolic chains', () => {
     expect(chainOp.steps[0].inlineGateCriteria).toBeUndefined();
   });
 
-  test('regression: deprecated bare `=` form is untouched in segments', () => {
-    // Baseline measured BEFORE the S9 change (2026-08-18): step args keep the `= "x"` text,
-    // whole-command detection still reports a (deprecated) gate with criteria "x".
+  test('a bare `=` in a segment is argument text, never a gate token', () => {
+    // `::` is the gate operator; `parseCommand` refuses the `=` spelling before detection runs
+    // (`retired-operators.test.ts`), so detection itself sees no gate here.
     const command = '>>a note = "x" --> >>b';
     const detection = parser.detectOperators(command);
 
     const chainOp = detection.operators.find((op): op is ChainOperator => op.type === 'chain');
-    expect(chainOp).toBeDefined();
-    expect(chainOp?.steps).toHaveLength(2);
-    expect(chainOp?.steps[0].promptId).toBe('a');
-    expect(chainOp?.steps[0].args).toBe('note = "x"');
+    expect(chainOp?.steps.map((step) => step.args)).toEqual(['note = "x"', '']);
     expect(chainOp?.steps[0].inlineGateCriteria).toBeUndefined();
-
-    expect(detection.operatorTypes).toContain('gate');
-    const gateOp = detection.operators.find((op) => op.type === 'gate');
-    if (gateOp?.type === 'gate') {
-      expect(gateOp.criteria).toBe('x');
-      expect(gateOp.parsedCriteria).toEqual(['x']);
-    }
+    expect(detection.operatorTypes).not.toContain('gate');
   });
 
   describe('builder-level attribution (buildSymbolicChain)', () => {

@@ -266,7 +266,7 @@ function formatAcceptanceFacts(summary: GateVerdictSummary): string[] {
   if (summary.tier === 'reminder')
     lines.push('    Reminder attestation: self-declared, not graded.');
   else if (isLegacyUnverifiedAcceptance(summary)) {
-    lines.push('    Legacy unverified acceptance: no recorded semantic or tool component.');
+    lines.push('    Verdict-only acceptance: no recorded semantic or tool component.');
   }
   const semantic = summary.semanticResult;
   if (semantic !== undefined) {

@@ -75,17 +75,11 @@ export interface GateOperator {
 }
 
 /**
- * Framework selector operator (`^framework`; `@framework` is a deprecated spelling that still parses)
+ * Framework selector operator (`^framework`)
  */
 export interface FrameworkOperator {
   type: 'framework';
   frameworkId: string;
-  /**
-   * The sigil the command was typed with. Writer: `SymbolicCommandParser.detectOperators`.
-   * Reader: `OperatorValidationStage`, which owes the caller one advisory line when it is a
-   * deprecated spelling.
-   */
-  sigil: string;
   normalizedId: string;
   temporary: boolean;
   scopeType: 'execution' | 'chain';

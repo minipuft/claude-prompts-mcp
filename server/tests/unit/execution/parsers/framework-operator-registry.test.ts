@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, jest, test } from '@jest/globals';
 
 import {
-  DEPRECATED_FRAMEWORK_SIGILS,
   FRAMEWORK_SIGIL,
-  FRAMEWORK_SIGIL_CLASS,
+  FRAMEWORK_SIGIL_SOURCE,
   OPERATOR_PATTERNS,
-  deprecatedFrameworkSigilNote,
 } from '../../../../src/engine/execution/parsers/operator-patterns.js';
 import {
   findFrameworkOperatorOutsideQuotes,
@@ -38,21 +36,18 @@ describe('framework operator — registry is the single definition', () => {
     parser = createSymbolicCommandParser(logger, (normalizedId) => normalizedId === 'CAGEERF');
   });
 
-  test('registry declares `^` canonical with `@` deprecated, not removed', () => {
+  test('registry declares `^` as the framework operator and no other sigil', () => {
     const framework = OPERATOR_PATTERNS.framework;
     expect(framework.symbol).toBe('^');
-    // Both spellings must still match — `@` parses until the next major.
     expect(new RegExp(framework.pattern.source).test('^CAGEERF >>x')).toBe(true);
-    expect(new RegExp(framework.pattern.source).test('@CAGEERF >>x')).toBe(true);
+    expect(new RegExp(framework.pattern.source).test('@CAGEERF >>x')).toBe(false);
   });
 
-  // Every combination of {canonical, deprecated} sigil x {spaced, unspaced} must survive the
-  // chain-prefix strip. Three of these four threw before the registry was repaired.
+  // Spaced and unspaced must both survive the chain-prefix strip; the unspaced form threw before
+  // the registry was repaired.
   test.each([
-    ['^CAGEERF >>a --> >>b', 'canonical sigil, spaced'],
-    ['@CAGEERF >>a --> >>b', 'deprecated sigil, spaced'],
-    ['^CAGEERF>>a --> >>b', 'canonical sigil, unspaced'],
-    ['@CAGEERF>>a --> >>b', 'deprecated sigil, unspaced'],
+    ['^CAGEERF >>a --> >>b', 'spaced'],
+    ['^CAGEERF>>a --> >>b', 'unspaced'],
   ])('%s (%s) strips cleanly and yields both chain steps', (command) => {
     const result = parser.detectOperators(command);
 
@@ -65,10 +60,10 @@ describe('framework operator — registry is the single definition', () => {
   });
 
   test('the extractor derives from the registry rather than its own copy', () => {
-    // Discriminating case: the registry's char class is what admits `^`. An extractor carrying a
-    // stale private copy would still resolve `@` here and fail only on `^`.
+    // Discriminating case: the registry pattern admits `^` and nothing else. An extractor carrying
+    // a stale private copy would still resolve `@` here.
     expect(findFrameworkOperatorOutsideQuotes('^CAGEERF >>x')?.frameworkId).toBe('CAGEERF');
-    expect(findFrameworkOperatorOutsideQuotes('@CAGEERF >>x')?.frameworkId).toBe('CAGEERF');
+    expect(findFrameworkOperatorOutsideQuotes('@CAGEERF >>x')).toBeNull();
   });
 
   test('non-operator text is not claimed as a framework', () => {
@@ -77,15 +72,15 @@ describe('framework operator — registry is the single definition', () => {
     expect(findFrameworkOperatorOutsideQuotes('plain >>x')).toBeNull();
     // Path-like references are rejected by the extractor's own `/` and `.` guards, which do not
     // derive from the registry.
-    expect(findFrameworkOperatorOutsideQuotes('see @docs/guide >>x')).toBeNull();
-    expect(findFrameworkOperatorOutsideQuotes('see @file.md >>x')).toBeNull();
+    expect(findFrameworkOperatorOutsideQuotes('see ^docs/guide >>x')).toBeNull();
+    expect(findFrameworkOperatorOutsideQuotes('see ^file.md >>x')).toBeNull();
   });
 });
 
 /**
  * The framework set changes while the server runs, so the parser asks the lookup on every parse
  * instead of holding the ids it was built with. A copy taken at construction kept a framework
- * created afterwards out of `@id` detection until restart.
+ * created afterwards out of `^id` detection until restart.
  */
 describe('framework operator — registration is read at parse time', () => {
   const logger = {
@@ -106,33 +101,32 @@ describe('framework operator — registration is read at parse time', () => {
       registered.has(normalizedId)
     );
 
-    expect(frameworkOperatorIn(parser, '@later >>x')).toBeUndefined();
+    expect(frameworkOperatorIn(parser, '^later >>x')).toBeUndefined();
 
     registered.add('LATER');
-    expect(frameworkOperatorIn(parser, '@later >>x')).toMatchObject({
+    expect(frameworkOperatorIn(parser, '^later >>x')).toMatchObject({
       frameworkId: 'later',
       normalizedId: 'LATER',
     });
 
     registered.delete('LATER');
-    expect(frameworkOperatorIn(parser, '@later >>x')).toBeUndefined();
+    expect(frameworkOperatorIn(parser, '^later >>x')).toBeUndefined();
   });
 
-  test('without a lookup, every @word is treated as a framework operator', () => {
+  test('without a lookup, every ^word is treated as a framework operator', () => {
     const parser = createSymbolicCommandParser(logger);
-    expect(frameworkOperatorIn(parser, '@anything >>x')).toMatchObject({
+    expect(frameworkOperatorIn(parser, '^anything >>x')).toMatchObject({
       normalizedId: 'ANYTHING',
     });
   });
 });
 
 /**
- * `^` is the canonical framework sigil and `@` a deprecated alias: both resolve the same
- * framework, the operator records which one was typed, and every site that strips a framework
- * prefix takes both. Those strip sites once named only `@`, so the canonical spelling threw
- * `Invalid chain step format` in a position where the deprecated one parsed.
+ * `^` is the framework sigil, taken from the registry by every site that strips a framework
+ * prefix. Those strip sites once named only `@`, so `^` threw `Invalid chain step format` in a
+ * position where `@` parsed.
  */
-describe('framework operator — `^` canonical, `@` deprecated alias', () => {
+describe('framework operator — `^` from the registry at every strip site', () => {
   const logger = {
     debug: jest.fn(),
     info: jest.fn(),
@@ -144,45 +138,27 @@ describe('framework operator — `^` canonical, `@` deprecated alias', () => {
     (normalizedId) => normalizedId === 'REACT' || normalizedId === 'CAGEERF'
   );
 
-  test('the sigils come from the registry: `^` canonical, `@` the only deprecated spelling', () => {
+  test('the sigil comes from the registry: `^`, and only `^`', () => {
     expect(FRAMEWORK_SIGIL).toBe('^');
-    expect(DEPRECATED_FRAMEWORK_SIGILS).toEqual(['@']);
-    const accepted = new RegExp(`^${FRAMEWORK_SIGIL_CLASS}$`);
+    const accepted = new RegExp(`^${FRAMEWORK_SIGIL_SOURCE}$`);
     expect(accepted.test('^')).toBe(true);
-    expect(accepted.test('@')).toBe(true);
-    expect(accepted.test('#')).toBe(false);
+    expect(accepted.test('@')).toBe(false);
   });
 
-  test.each([
-    ['^ReACT >>p', '^'],
-    ['@ReACT >>p', '@'],
-  ])('%s resolves the framework and records the sigil it was typed with', (command, sigil) => {
-    const detection = parser.detectOperators(command);
+  test('`^ReACT >>p` resolves the framework', () => {
+    const detection = parser.detectOperators('^ReACT >>p');
 
     expect(detection.operators.find((op) => op.type === 'framework')).toMatchObject({
       frameworkId: 'ReACT',
       normalizedId: 'REACT',
-      sigil,
     });
     expect(parser.generateExecutionPlan(detection, 'p', '').frameworkOverride).toBe('REACT');
   });
 
-  test('the note names `^` for a deprecated sigil, and is absent for the canonical one', () => {
-    expect(deprecatedFrameworkSigilNote('^', 'ReACT')).toBeNull();
-    expect(deprecatedFrameworkSigilNote('@', 'ReACT')).toBe(
-      'Deprecated spelling: `@ReACT` still works, but the framework operator is `^ReACT`; ' +
-        '`@` is removed at the next major.'
-    );
-    // A sigil the registry does not list as a framework spelling owes no note.
-    expect(deprecatedFrameworkSigilNote('#', 'ReACT')).toBeNull();
-  });
-
   // A framework operator on a later chain step is dropped before the step's prompt id is read.
-  // `^` threw `Invalid chain step format` here while `@` parsed.
   test.each([
-    ['^CAGEERF >>a --> %lean ^ReACT >>b', 'canonical sigil on a later step'],
-    ['@CAGEERF >>a --> %lean @ReACT >>b', 'deprecated sigil on a later step'],
-    ['^CAGEERF >>a --> ^ReACT >>b', 'canonical sigil on a later step, no modifier'],
+    ['^CAGEERF >>a --> %lean ^ReACT >>b', 'on a later step after a modifier'],
+    ['^CAGEERF >>a --> ^ReACT >>b', 'on a later step, no modifier'],
   ])('%s (%s) yields both chain steps', (command) => {
     const chain = parser.detectOperators(command).operators.find((op) => op.type === 'chain') as
       { steps?: { promptId: string }[] } | undefined;
@@ -193,14 +169,13 @@ describe('framework operator — `^` canonical, `@` deprecated alias', () => {
   test.each([
     ['>> ^CAGEERF >>a', '^CAGEERF >>a'],
     ['>>^CAGEERF >>a', '^CAGEERF >>a'],
-    ['>> @CAGEERF >>a', '@CAGEERF >>a'],
   ])('a leading >> before a framework operator is dropped: %s', (command, normalized) => {
     expect(normalizeSymbolicPrefixes(command)).toMatchObject({ normalized, hadPrefixes: true });
   });
 
-  test('a leading >> before a prompt id is left alone', () => {
-    expect(normalizeSymbolicPrefixes('>> plain')).toMatchObject({
-      normalized: '>> plain',
+  test.each(['>> plain', '>> @CAGEERF >>a'])('a leading >> before %s is left alone', (command) => {
+    expect(normalizeSymbolicPrefixes(command)).toMatchObject({
+      normalized: command,
       hadPrefixes: false,
     });
   });

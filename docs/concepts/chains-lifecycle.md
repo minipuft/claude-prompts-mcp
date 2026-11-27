@@ -86,15 +86,15 @@ Chains persist across messages. You don't need to feed the entire history back t
   Python hooks and cross-language consumers actually read.
   `workspace_id` on these storage rows is the server's launch namespace;
   `continuity_scope_id` identifies the request's run scope. Neither replaces process ownership
-  in `run_owner_pid`. A missing request scope retains the existing legacy unfiltered policy.
+  in `run_owner_pid`. A request with no scope reads runs unfiltered by scope.
   A run paused for conversation is the one exception to PID scoping: it outlives its owner
   ([Pausing a Run for Conversation](#pausing-a-run-for-conversation)).
 - **Resume**: Just provide `chain_id` + `user_response`.
   Preserve the full returned token, such as `chain-implementation_plan/plan_table#1`,
   including namespace segments and the run suffix. Reference admission does not normalize
   existing stored tokens; new-run reservation chooses its own number, starting at `#1`.
-  A missing numbered token does not fall back to another run or to a bare legacy token.
-  An existing bare legacy token still addresses its exact stored row.
+  A numbered token that names no run does not fall back to another run or to the id without
+  its number. A token without a run number addresses only a stored row with exactly that id.
 - **Debug**: Use `system_control(action: "status")` to inspect active sessions.
 
 ### Automatic Resume
@@ -102,7 +102,7 @@ Chains persist across messages. You don't need to feed the entire history back t
 The MCP server recognizes active sessions. If you reply to a chain step, it automatically routes your response to the running session, restoring the execution context.
 
 Resuming a run that already completed returns an "already complete" notice instead of re-opening
-it. Resuming a run parked on its final step without an explicit `chain_id` no longer restarts it
+it. Resuming a run parked on its final step without an explicit `chain_id` does not restart it
 from step 1 — only an explicit `force_restart` does.
 
 A run is not complete while a gate review on it is outstanding. When the final step's answer fails
@@ -141,8 +141,8 @@ The claim uses the same identity policy as ordinary requests: launch defaults ap
 headers are absent, and locked or override-disabled configurations retain those defaults.
 A meaningful request scope must match the run before its token is used; a scope refusal retains
 the token and owner, so the original request scope can claim it. Request continuity is
-separate from the launch storage namespace and process owner. An effective unfiltered
-scope keeps legacy behavior; it does not replace either storage or ownership checks.
+separate from the launch storage namespace and process owner. An unfiltered scope reads runs
+unfiltered by scope; it does not replace either storage or ownership checks.
 A paused run is the exception to resuming in the same call: its claim stops at custody (below).
 
 ### Pausing a Run for Conversation
@@ -166,7 +166,7 @@ were. It records `{kind:"conversation", nodeId, pausedAt}` beside them, plus a r
   `inputs`, `options` or `gates` is refused before anything changes. Presence decides, so an empty
   string or `false` still counts as sent.
 - **While paused**, every other workflow call on the run is refused with the resume-or-abort
-  instruction, and nothing changes. Reads still work: `system_control` session list and inspect,
+  instruction, and nothing changes. Reads are allowed: `system_control` session list and inspect,
   and the session resources, show the pause and what the run still owes, and reading does not
   touch the run. Pausing again is idempotent and keeps the original pause.
 - **Busy.** A pause while a request on the run is still in flight is refused as retryable.
@@ -679,8 +679,8 @@ spawned a sub-agent to run it.
 mutation](#adaptive-mutation) inserts or skips a node, the step a positional offset would name is
 no longer the step the run actually hands off to next; the run's live next-node id is asked for
 directly and matched back to the step it names, so the advisory note and the brief itself both
-point at the step that will really execute. Legacy chains whose steps carry no `id` (and calls
-made with no active run to ask) keep the pre-existing positional answer unchanged.
+point at the step that will really execute. Chains whose steps carry no `id` (and calls made with
+no active run to ask) are answered by position.
 
 ### Resuming a delegated step
 

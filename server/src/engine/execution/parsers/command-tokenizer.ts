@@ -183,14 +183,14 @@ function detectDelimiters(trimmed: string, operators: TokenizedOperator[]): void
   }
 }
 
-/** Detect gate operators (:: or = followed by criteria), skipping delimiter overlaps. */
+/** Detect gate operators (:: followed by criteria), skipping delimiter overlaps. */
 function detectGates(
   trimmed: string,
   operators: TokenizedOperator[],
   delimiterRanges: ReadonlyArray<readonly [number, number]>
 ): void {
   const gatePattern =
-    /\s+(::|=(?![=>]))\s*(?:([a-z][a-z0-9_-]*):["']([^"']+)["']|[a-z][a-z0-9_-]*\([^)]+\)|["']([^"']+)["']|([^\s"']+))/gi;
+    /\s+(::)\s*(?:([a-z][a-z0-9_-]*):["']([^"']+)["']|[a-z][a-z0-9_-]*\([^)]+\)|["']([^"']+)["']|([^\s"']+))/gi;
   for (const m of findMatchesOutsideQuotes(trimmed, gatePattern)) {
     if (overlapsRanges(m.index, m[0].length, delimiterRanges)) continue;
     const namedId = m[2];
@@ -205,9 +205,9 @@ function detectGates(
   }
 }
 
-/** Detect framework (^word, or the deprecated @word), style (#id), and repetition (*N) operators. */
+/** Detect framework (^word), style (#id), and repetition (*N) operators. */
 function detectModifiers(trimmed: string, operators: TokenizedOperator[]): void {
-  // Framework operators (^word, or the deprecated @word) — quote-aware with path/reference exclusion
+  // Framework operators (^word) — quote-aware with path/reference exclusion
   const fwMatch = findFrameworkOperatorOutsideQuotes(trimmed);
   if (fwMatch !== null) {
     operators.push({

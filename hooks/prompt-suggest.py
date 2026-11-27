@@ -11,8 +11,7 @@ Architecture:
 - Layer 2: This hook - efficiency layer translating >>syntax to prompt_engine calls
 
 Operators detected (from SSOT registry):
-- `-->` chain, `==>` delegation, `::` gate, `^` framework (`@` is a deprecated alias), `#` style,
-  `* N` repetition
+- `-->` chain, `==>` delegation, `::` gate, `^` framework, `#` style, `* N` repetition
 """
 
 import json
@@ -160,12 +159,12 @@ def detect_inline_gates(message: str) -> list[str]:
 
 def detect_framework(message: str) -> str | None:
     """
-    Detect ^FRAMEWORK syntax (or the deprecated @FRAMEWORK alias) in message.
+    Detect ^FRAMEWORK syntax in message.
     Returns the framework ID if found (normalized to lowercase).
 
     Examples:
         ^CAGEERF >>analyze -> "cageerf"
-        @ReACT >>debug -> "react"  (deprecated alias)
+        ^ReACT >>debug -> "react"
 
     Note: Framework IDs are normalized to lowercase to align with MCP server storage.
     """
@@ -681,7 +680,7 @@ def main():
         arguments = format_arguments(invoked_prompt) if invoked_prompt else None
 
         # Use full message as command (server parses it)
-        # Preserve ^framework (or @framework), #style prefixes and all operators
+        # Preserve ^framework, #style prefixes and all operators
         command = user_message.strip()
 
         # Format outputs (check config for expanded mode)

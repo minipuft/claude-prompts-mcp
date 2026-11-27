@@ -90,7 +90,7 @@ describe('CommandType Discriminant', () => {
 
   describe('Framework operator commands', () => {
     test('assigns commandType: single for framework operator without chain', async () => {
-      const result = await parser.parseCommand('@CAGEERF >>test_prompt input', mockPrompts);
+      const result = await parser.parseCommand('^CAGEERF >>test_prompt input', mockPrompts);
 
       expect(result.commandType).toBe('single');
       expect(result.format).toBe('symbolic');
@@ -98,7 +98,7 @@ describe('CommandType Discriminant', () => {
 
     test('assigns commandType: chain for framework operator with chain', async () => {
       const result = await parser.parseCommand(
-        '@CAGEERF >>test_prompt input --> test_prompt input',
+        '^CAGEERF >>test_prompt input --> test_prompt input',
         mockPrompts
       );
 

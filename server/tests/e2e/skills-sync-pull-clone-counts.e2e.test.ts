@@ -110,7 +110,7 @@ describe('skills_sync pull/clone report a count matching the filesystem', () => 
 
     await writeFile(
       path.join(workspace, 'skills-sync.yaml'),
-      `exports:\n  - prompt:general/${PULL_PROMPT_ID}\n`
+      `registrations:\n  claude-code:\n    user:\n      - prompt:general/${PULL_PROMPT_ID}\n`
     );
 
     // Export once so a SKILL.md exists under the temp HOME for `pull` to read back.

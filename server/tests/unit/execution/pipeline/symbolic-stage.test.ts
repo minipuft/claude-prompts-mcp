@@ -131,7 +131,7 @@ const buildParsedCommand = (): ParsedCommand & {
   confidence: 0.92,
   metadata: {
     originalCommand:
-      '@scamper >>stage_one topic="Deep Dive" :: "Use numbered lists" --> >>stage_two previous_step_output="{{step1}}" :: "Summarize the research"',
+      '^scamper >>stage_one topic="Deep Dive" :: "Use numbered lists" --> >>stage_two previous_step_output="{{step1}}" :: "Summarize the research"',
     parseStrategy: 'symbolic',
     detectedFormat: 'symbolic',
     warnings: [],

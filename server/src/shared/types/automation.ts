@@ -65,8 +65,6 @@ export type ScriptRuntime = (typeof SUPPORTED_RUNTIMES)[number];
  * - explicit: Execute only when user writes tool:<id>
  * - always: Execute on every prompt run regardless of args
  * - never: Tool is defined but intentionally disabled
- *
- * @deprecated 'parameter_match' is deprecated, use 'schema_match' instead.
  */
 export type TriggerType = 'schema_match' | 'explicit' | 'always' | 'never';
 
@@ -159,7 +157,7 @@ export interface ScriptToolDefinition {
   workingDir?: string;
   /** Whether this tool is enabled (default: true) */
   enabled?: boolean;
-  /** Execution control configuration (mode, trigger, strict) */
+  /** Execution control configuration (trigger, confirm, strict) */
   execution?: AutomationExecutionConfig;
 }
 
@@ -370,8 +368,6 @@ export interface ToolPendingConfirmation {
 export interface ToolTriggerFilterResult {
   /** Tools ready for immediate execution (default trigger, matched successfully) */
   readyForExecution: ToolDetectionMatch[];
-  /** Tools skipped due to `trigger: explicit` (no explicit request). Legacy: always empty. */
-  skippedManual: string[];
   /** Tools requiring user confirmation (`confirm: true`) */
   pendingConfirmation: ToolPendingConfirmation[];
   /** Whether pipeline should return early for confirmation */
@@ -379,7 +375,7 @@ export interface ToolTriggerFilterResult {
 }
 
 /**
- * Confirmation response structure for confirm mode tools.
+ * Confirmation response structure for tools declaring `confirm: true`.
  *
  * Returned when tools require user confirmation before execution.
  */

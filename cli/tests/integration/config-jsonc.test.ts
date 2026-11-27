@@ -71,6 +71,31 @@ describe('cpm config (config.jsonc)', () => {
     expect(getResult.stdout).toContain('gates.enabled = false');
   });
 
+  // A config file with no "version" is the pre-5.0 shape; cpm refuses it with the text the server
+  // refuses it with, naming each old key, and never edits it.
+  it('cpm config get refuses a config file with no "version", naming its .mode key', () => {
+    tmpWs = makeWorkspace('unversioned');
+    const configPath = join(tmpWs, 'config.json');
+    writeFileSync(configPath, '{ "gates": { "mode": "off" } }\n');
+
+    const get = run(['config', 'get', 'gates.enabled', '--workspace', tmpWs]);
+    const set = run(['config', 'set', 'gates.enabled', 'true', '--workspace', tmpWs]);
+
+    expect(get.exitCode).toBe(1);
+    expect(get.stderr).toContain(`${configPath} is a config file with no "version" key`);
+    expect(get.stderr).toContain('"gates.mode": "off" becomes "gates.enabled": false');
+    expect(get.stderr).toContain('Then add "version": 5 at the top level of the file.');
+    expect(set.exitCode).toBe(1);
+    expect(set.stdout).toContain('"gates.mode": "off" becomes "gates.enabled": false');
+    expect(readFileSync(configPath, 'utf8')).toBe('{ "gates": { "mode": "off" } }\n');
+
+    // Positive control: the same file with "version": 5 is read, and its `.mode` key is not.
+    writeFileSync(configPath, '{ "version": 5, "gates": { "mode": "off" } }\n');
+    const control = run(['config', 'get', 'gates.enabled', '--workspace', tmpWs]);
+    expect(control.exitCode).toBe(1);
+    expect(control.stdout).toContain("Key 'gates.enabled' not found in config.json");
+  });
+
   it('cpm config list and validate work on a commented config.jsonc', () => {
     tmpWs = makeWorkspace('list-validate');
     writeFileSync(

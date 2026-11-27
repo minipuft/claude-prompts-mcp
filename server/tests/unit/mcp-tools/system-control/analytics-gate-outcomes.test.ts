@@ -69,8 +69,8 @@ describe('analytics reports gate outcomes from the ledger', () => {
     expect(text).toContain(
       '**Per-Gate Recorded Outcomes** (recent page; acceptance is not accuracy)'
     );
-    expect(text).toContain('Legacy unverified acceptance: 1 passed / 0 failed');
-    expect(text).toContain('Legacy unverified acceptance: 1 passed / 1 failed');
+    expect(text).toContain('Verdict-only acceptance: 1 passed / 0 failed');
+    expect(text).toContain('Verdict-only acceptance: 1 passed / 1 failed');
   });
 
   test('a reminder attestation is counted apart from the graded gates, never inside them', async () => {

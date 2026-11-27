@@ -839,7 +839,10 @@ describe('frozen semantic source rendering', () => {
       attemptCount: 0,
       maxAttempts: 3,
     };
-    expect(projectFrozenReview(review)).toEqual({ submission: 'legacy', semanticReviews: [] });
+    expect(projectFrozenReview(review)).toEqual({
+      submission: 'verdict-only',
+      semanticReviews: [],
+    });
     expect(semanticReviewResume(review, 'chain-legacy')).toBeUndefined();
     expect(buildStructuredVerdictTemplate(['legacy'], [], new Map(), new Map())).toBe(
       '{\n  "overall": "PASS",\n  "rationale": "<overall assessment>",\n  "per_gate": [\n    {"index": 1, "passed": true, "rationale": "legacy: <why>"}\n  ]\n}'

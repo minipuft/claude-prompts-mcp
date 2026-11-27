@@ -90,10 +90,36 @@ describe('skills-sync auto-deregistration', () => {
     expect([...(await load())]).toEqual(['general/other']);
   });
 
-  it('still honors the deprecated flat `exports` list', async () => {
-    await writeConfig({ exports: ['prompt:development/dev-workflow'] });
-    expect([...(await load())]).toEqual(['development/dev-workflow']);
-  });
+  it.each([
+    ['a list', { exports: ['prompt:development/dev-workflow'] }],
+    ['`all`', { exports: 'all' }],
+    ['a user/project map', { exports: { user: ['prompt:development/dev-workflow'] } }],
+    [
+      'a list beside registrations',
+      {
+        exports: ['prompt:development/dev-workflow'],
+        registrations: { 'claude-code': { user: ['prompt:general/other'] } },
+      },
+    ],
+  ])(
+    'refuses a file carrying the retired `exports` key as %s: logs it and deregisters nothing',
+    async (_shape, config) => {
+      await writeConfig(config);
+      const errors: string[] = [];
+      const logger = { ...silentLogger, error: (message: string) => errors.push(message) };
+
+      const result = await loadSkillsSyncExports(
+        new PathResolver({ cli: {}, packageRoot: serverRoot }),
+        logger as unknown as Logger,
+        ALL_PROMPTS
+      );
+
+      expect(result.size).toBe(0);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toContain('refused since 6.0.0');
+      expect(errors[0]).toContain('a `registrations` map in skills-sync.yaml, keyed by client id');
+    }
+  );
 
   it('returns an empty set when the config declares neither key', async () => {
     await writeConfig({ overrides: { 'claude-code': { outputDir: { user: '/tmp/x' } } } });

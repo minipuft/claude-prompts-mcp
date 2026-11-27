@@ -13,7 +13,6 @@ interface ScopedRegistration {
 
 interface SkillsSyncConfigFile {
   registrations?: Record<string, ScopedRegistration | 'all'>;
-  exports?: ScopedRegistration | 'all';
   overrides?: Record<string, unknown>;
 }
 

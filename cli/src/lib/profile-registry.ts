@@ -6,7 +6,11 @@ import { findWorkspaceConfigFiles, parseConfigText } from '@shared/utils/config-
 
 import { TYPE_CONFIG } from './types.js';
 import type { ResourceType } from './types.js';
-import { discoverResourcePaths, resolveResourceDir } from './workspace.js';
+import {
+  discoverResourcePaths,
+  resolveResourceDir,
+  retiredRootLayoutRefusal,
+} from './workspace.js';
 
 /** The registry's file name; the server reads the same file read-only beside the workspace. */
 export const PROFILE_REGISTRY_FILE_NAME = 'workspaces.jsonc';
@@ -94,7 +98,7 @@ export function refuseAdd(
   if (!existsSync(folder) || !statSync(folder).isDirectory()) {
     return `${folder} does not exist or is not a folder; create it first.`;
   }
-  return undefined;
+  return retiredRootLayoutRefusal(folder);
 }
 
 /**

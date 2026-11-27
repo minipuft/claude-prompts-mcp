@@ -55,6 +55,7 @@ import { planRestore } from '#modules/versioning/restore-plan.js';
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { configTenantId } from '#shared/utils/config-scope.js';
 import { hashBytes } from '#shared/utils/hash.js';
+import { unversionedConfigFileRefusal } from '#shared/utils/unversioned-config-file.js';
 
 /**
  * Which rows a config operation reads — the same key AND the same tenant `config-checkpoint.ts`
@@ -280,9 +281,11 @@ function currentConfigTree(configPath: string): Array<{ path: string; hash: stri
 /**
  * Refuse recorded bytes this build would not accept as a config — named, before any write.
  *
- * Two checks, because they fail for different reasons and an operator needs to know which. Parsing
- * catches a corrupted or truncated object; validating catches a document that parses fine and
- * names a key or holds a value this build has since retired. Warnings are not refusals:
+ * Three checks, because they fail for different reasons and an operator needs to know which.
+ * Parsing catches a corrupted or truncated object; a document with no `version` is the pre-5.0
+ * shape no reader accepts, refused with the text the server and `cpm` print for it; validating
+ * catches a document that names a key or holds a value this build has since retired. Warnings are
+ * not refusals:
  * `validateConfigDocument` warns on an unknown key, and an operator's own extra key is not a
  * reason to refuse them their own file back.
  */
@@ -302,6 +305,10 @@ function parseBackRefusal(
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return `config version ${targetVersion} is not a JSON object. Nothing was written`;
+  }
+  const unversioned = unversionedConfigFileRefusal(recordedName, parsed);
+  if (unversioned !== undefined) {
+    return `config version ${targetVersion} cannot be restored: ${unversioned}\nNothing was written`;
   }
   const check = validateConfigDocument(parsed as Record<string, unknown>);
   if (!check.valid) {

@@ -13,7 +13,7 @@ Each client's skills directory belongs to that client: Skills Sync writes export
 | Problem                            | Solution                                                        | Result                                                    |
 | ---------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------- |
 | Prompts locked inside MCP server   | `skills-sync export` compiles to native format                  | `/review` works as a Claude Code skill, Cursor rule, etc. |
-| Exported prompts duplicated in MCP | Auto-deregistration via exports list                            | Single source, no duplication                             |
+| Exported prompts duplicated in MCP | Auto-deregistration via `registrations`                         | Single source, no duplication                             |
 | Drift between source and exports   | `skills-sync diff`, against the manifest or the would-be export | Know when skills are stale                                |
 
 ## Quick Start
@@ -21,7 +21,7 @@ Each client's skills directory belongs to that client: Skills Sync writes export
 ```bash
 cd server
 
-# Copy the example config and customize your exports
+# Copy the example config and customize your registrations
 cp skills-sync.example.yaml skills-sync.yaml
 
 # Export prompts to every client registered in skills-sync.yaml
@@ -45,10 +45,13 @@ npm run skills:export -- --json
 > `skills-sync.yaml` is git-ignored by default — it contains user-specific output paths and export selections. Commit `skills-sync.example.yaml` as a team template instead.
 
 ```yaml
-# Opt-in allow-list. Only listed resources are exported.
-exports:
-  - prompt:development/validate_work
-  - prompt:development/review
+# Opt-in selection per client. Only listed resources are exported, and only for the scope
+# (user or project) they are listed under. A client set to `all` exports every resource.
+registrations:
+  claude-code:
+    user:
+      - prompt:development/validate_work
+      - prompt:development/review
 
 # Optional: override default output directories per client
 # overrides:
@@ -95,9 +98,11 @@ Writes follow the same roots:
 Only prompts are exported as standalone skills. Format is `prompt:{category}/{id}`:
 
 ```yaml
-exports:
-  - prompt:development/validate_work # → resources/prompts/development/validate_work/
-  - prompt:development/review # → resources/prompts/development/review/
+registrations:
+  claude-code:
+    user:
+      - prompt:development/validate_work # → resources/prompts/development/validate_work/
+      - prompt:development/review # → resources/prompts/development/review/
 ```
 
 **Gate bundling**: Prompts that declare `gateConfiguration.include` in their `prompt.yaml` get referenced gates bundled into the skill directory as `gates/{id}/gate.yaml` + `guidance.md`, with an inline `## Quality Gates` section in the SKILL.md split into `### Checks` and `### Reminders` — see [Which Gates an Exported Skill Carries](#which-gates-an-exported-skill-carries) for how each tier renders.
@@ -132,11 +137,11 @@ skills-sync.yaml registrations → prompt registration reads it → registry ski
 
 The exported set is recomputed at startup and on every prompt hot reload, not read once and cached — editing `skills-sync.yaml` and then editing (or re-saving) a prompt file is enough to pick up a new export or an unregistration without a restart. Editing `skills-sync.yaml` alone does not trigger a reload; it takes effect the next time a prompt file changes or the server restarts.
 
-- Reads `registrations` (every client and every scope, unioned). The pre-`registrations` flat `exports` list is still honored on read
+- Reads `registrations` (every client and every scope, unioned)
 - A client set to `'all'` deregisters every prompt
 - No manual `registerWithMcp: false` flags needed
 
-**`>>` still works.** Deregistration removes only the MCP prompts-protocol listing. `prompt_engine` resolves `>>id` against its own prompt set, which this never touches — so an exported prompt keeps its full gate, chain, and framework machinery when you invoke it symbolically. That is the intended split:
+**`>>` is unaffected.** Deregistration removes only the MCP prompts-protocol listing. `prompt_engine` resolves `>>id` against its own prompt set, which this never touches — so an exported prompt keeps its full gate, chain, and framework machinery when you invoke it symbolically. That is the intended split:
 
 | Path                          | What you get                                                                                         |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -291,7 +296,7 @@ Each export records a manifest in the `skills_sync_manifests` table of `server/r
 
 - Modified source YAML (content changed since last export)
 - Missing exports (resource in manifest but not on disk)
-- New resources (in exports list but not yet exported)
+- New resources (in `registrations` but not yet exported)
 
 **With no saved manifest, `diff` compares against the would-be export instead.** An export run
 without a database writes every skill file and saves no manifest row, so a manifest is missing far

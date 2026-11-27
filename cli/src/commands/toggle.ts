@@ -251,11 +251,8 @@ function printAllDisabledAdvisory(workspace: string, type: 'frameworks' | 'style
 
       const configResult = readConfig(workspace);
       if (configResult.success && configResult.config) {
-        // Raw-file read, so a config still carrying the retired `mode` spelling is recognised
-        // too; the advice printed always names the canonical command.
         const value = getConfigValue(configResult.config, configKey);
-        const legacy = getConfigValue(configResult.config, configKey.replace(/\.enabled$/, '.mode'));
-        if (value === true || (value === undefined && legacy === 'on')) {
+        if (value === true) {
           console.log(`\nTip: All ${type} are now disabled. To turn off the subsystem:`);
           console.log(`  cpm disable ${type}`);
         }

@@ -67,8 +67,8 @@ Claude: prompt_engine(command:">>code_review")  # Updated version runs instantly
 **Solution**: Frameworks inject a structured thinking method into the system prompt. Claude follows defined reasoning phases. Each framework auto-applies quality gates for its phases.
 
 ```text
-prompt_engine(command: "@CAGEERF Review this architecture")
-prompt_engine(command: "@ReACT Debug this error")
+prompt_engine(command: "^CAGEERF Review this architecture")
+prompt_engine(command: "^ReACT Debug this error")
 ```
 
 **Expect**: Claude's response follows labeled phases. The framework's gates validate each phase completed properly.
@@ -141,7 +141,7 @@ Three consolidated tools Claude can call:
 prompt_engine(command: ">>code_review")
 
 # Apply framework + gates
-prompt_engine(command: "@CAGEERF >>analysis :: 'cite sources'")
+prompt_engine(command: "^CAGEERF >>analysis :: 'cite sources'")
 
 # Chain steps together
 prompt_engine(command: "research --> analyze --> summarize")
@@ -176,7 +176,7 @@ system_control(action: "analytics")
 | :----: | :------------ | :---------------------------- |
 |  `>>`  | **Prompt**    | Execute template by ID        |
 | `-->`  | **Chain**     | Pipe output to next step      |
-|  `@`   | **Framework** | Inject framework + auto-gates |
+|  `^`   | **Framework** | Inject framework + auto-gates |
 |  `::`  | **Gate**      | Add quality criteria          |
 |  `%`   | **Modifier**  | Control execution mode        |
 
@@ -256,7 +256,7 @@ my-workspace/
 │               ├── tool.yaml    # Config (trigger, runtime, timeout)
 │               ├── schema.json  # Input validation schema
 │               └── script.py    # Validation logic
-├── config.jsonc              # Server settings (optional; config.json also still read)
+├── config.jsonc              # Server settings (optional; or config.json)
 ├── frameworks/               # Custom thinking frameworks (optional)
 └── gates/                    # Custom quality gates (optional)
 ```

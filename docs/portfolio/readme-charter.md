@@ -210,7 +210,7 @@ adds a canonical terminology map, explicit client/server boundaries, governance 
 reader-visible terminology rule. The companion validator change enforces only the last item because
 the remaining checks require semantic judgment.
 
-**Amended 2026-08-12 (client setup links).** The hero treated a legacy VS Code redirect and an
+**Amended 2026-08-12 (client setup links).** The hero treated an outdated VS Code redirect and an
 undocumented Cursor MCP deeplink as durable one-click installers. The Cursor action failed in live
 use, and current official client documentation no longer supports the two links as one shared
 pattern. Installation URLs are now external contracts: verify each against current official client

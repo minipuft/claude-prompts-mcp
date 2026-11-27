@@ -1,16 +1,16 @@
 /**
- * A framework created while the server runs is usable through the `@id` inline override, over a
+ * A framework created while the server runs is usable through the `^id` inline override, over a
  * real server — the same path a client takes.
  *
- * The command parser only treats `@word` as a framework operator when the word names a registered
- * framework, so `@docs/`-style text stays literal. It used to hold a copy of the framework ids
+ * The command parser only treats `^word` as a framework operator when the word names a registered
+ * framework, so other `^word` text stays literal. It used to hold a copy of the framework ids
  * taken once at startup. `resource_manager` then created a framework that every other surface
- * could see, while `@<new id> >>prompt` was parsed as literal text and failed with a parse error
- * until the server restarted.
+ * could see, while `^<new id> >>prompt` was parsed as literal text and failed with a parse error
+ * until the server restarted. The `@<id>` refusal asks the same live lookup.
  *
  * Each case pairs with a control that must hold on either side of that change: a bundled
  * framework is recognized, and a word that names no framework, or names one that was deleted,
- * stays literal. Without the negative controls a parser that accepted every `@word` would pass.
+ * stays literal. Without the negative controls a parser that accepted every `^word` would pass.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
@@ -90,19 +90,19 @@ describe('framework created mid-session (Streamable HTTP)', () => {
     if (runtimeRoot) await rm(runtimeRoot, { recursive: true, force: true });
   }, 20000);
 
-  it('control: a bundled framework named with @ applies', async () => {
-    const outcome = await render(`@cageerf >>${PROMPT_ID}`);
+  it('control: a bundled framework named with ^ applies', async () => {
+    const outcome = await render(`^cageerf >>${PROMPT_ID}`);
     expect(outcome.isError).toBe(false);
     expect(outcome.text).toContain('C.A.G.E.E.R.F');
   }, 45000);
 
-  it('control: an @word that names no framework stays literal text', async () => {
-    const outcome = await render(`@not_a_framework >>${PROMPT_ID}`);
+  it('control: a ^word that names no framework stays literal text', async () => {
+    const outcome = await render(`^not_a_framework >>${PROMPT_ID}`);
     expect(outcome.isError).toBe(true);
     expect(outcome.text).not.toContain(FRAMEWORK_GUIDANCE);
   }, 45000);
 
-  it('a framework created after startup applies through @id', async () => {
+  it('a framework created after startup applies through ^id', async () => {
     const created = await callTool('resource_manager', {
       resource_type: 'framework',
       action: 'create',
@@ -124,14 +124,18 @@ describe('framework created mid-session (Streamable HTTP)', () => {
     });
     expect(created.isError).toBe(false);
 
-    const outcome = await render(`@${FRAMEWORK_ID} >>${PROMPT_ID}`);
+    const outcome = await render(`^${FRAMEWORK_ID} >>${PROMPT_ID}`);
     expect(outcome.text).not.toContain('Parse error');
     expect(outcome.isError).toBe(false);
     expect(outcome.text).toContain(FRAMEWORK_GUIDANCE);
     expect(outcome.text).toContain(PROMPT_BODY);
+
+    const atSpelling = await render(`@${FRAMEWORK_ID} >>${PROMPT_ID}`);
+    expect(atSpelling.isError).toBe(true);
+    expect(atSpelling.text).toContain(`\`^${FRAMEWORK_ID}\``);
   }, 45000);
 
-  it('after the framework is deleted, @id is literal text again', async () => {
+  it('after the framework is deleted, ^id is literal text again', async () => {
     const deleted = await callTool('resource_manager', {
       resource_type: 'framework',
       action: 'delete',
@@ -140,7 +144,7 @@ describe('framework created mid-session (Streamable HTTP)', () => {
     });
     expect(deleted.isError).toBe(false);
 
-    const outcome = await render(`@${FRAMEWORK_ID} >>${PROMPT_ID}`);
+    const outcome = await render(`^${FRAMEWORK_ID} >>${PROMPT_ID}`);
     expect(outcome.isError).toBe(true);
     expect(outcome.text).not.toContain(FRAMEWORK_GUIDANCE);
   }, 45000);

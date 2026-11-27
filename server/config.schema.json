@@ -10,7 +10,7 @@
     "version": {
       "type": "number",
       "const": 5,
-      "description": "Which shape this config file is written in. `5` is the current format, described by every setting below. A file with no `version` at all is read as an older (4.x) file: the server translates it into the 5.0 shape when it loads, without changing anything on disk."
+      "description": "Which shape this config file is written in. `5` is the current format, described by every setting below. A file with no `version` is refused at startup, with a message naming each key to change."
     },
     "server": {
       "type": "object",
@@ -29,7 +29,7 @@
         }
       },
       "additionalProperties": false,
-      "description": "Server identity and transport settings."
+      "description": "Server name and port."
     },
     "paths": {
       "type": "object",
@@ -660,7 +660,7 @@
     "version"
   ],
   "additionalProperties": false,
-  "description": "The contents of a 5.0 `config.json`.\n\nEvery section is optional; `version` is not, because the loader routes on it and a file that does not say which shape it is written in cannot be read as either.",
+  "description": "The contents of a 5.0 `config.json`.\n\nEvery section is optional; `version` is not: a file that does not say which shape it is written in is refused.",
   "definitions": {},
   "allowTrailingCommas": true
 }

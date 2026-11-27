@@ -89,6 +89,7 @@ import {
   isIgnoredPromptEntryName,
   isReservedPromptDirectoryName,
 } from '#shared/utils/prompt-layout.js';
+import { retiredSkillsSyncExportsRefusal } from '#shared/utils/retired-skills-sync-exports.js';
 import { parseYamlOrThrow } from '#shared/utils/yaml/index.js';
 import { serializeYamlPreservingSource } from '#shared/utils/yaml/yaml-document-writer.js';
 
@@ -679,10 +680,15 @@ function validateSkillsSyncOptions(opts: SkillsSyncOptions): void {
 
 // ─── Section 2: Config Loader ───────────────────────────────────────────────
 
+/**
+ * The parsed skills-sync.yaml. A file carrying the retired top-level `exports` key is refused
+ * whole, before any command reads a selection from it.
+ */
 async function loadSyncConfig(configPath: string, paths: SkillsSyncPaths): Promise<SyncConfig> {
+  let parsed: SyncConfig | null;
   try {
     const raw = await readFile(configPath, 'utf-8');
-    return (yaml.load(raw) as SyncConfig | null) ?? {};
+    parsed = yaml.load(raw) as SyncConfig | null;
   } catch (error) {
     const example = path.join(paths.packageRoot, 'skills-sync.example.yaml');
     // With a workspace set the copy belongs there: it is read first, and an update replaces the package.
@@ -692,6 +698,9 @@ async function loadSyncConfig(configPath: string, paths: SkillsSyncPaths): Promi
       cause: error,
     });
   }
+  const refusal = retiredSkillsSyncExportsRefusal(configPath, parsed);
+  if (refusal !== undefined) throw new Error(refusal);
+  return parsed ?? {};
 }
 
 /**

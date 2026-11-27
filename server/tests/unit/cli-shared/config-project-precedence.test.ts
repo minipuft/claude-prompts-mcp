@@ -32,6 +32,7 @@ import { resolveTenantId } from '../../../src/cli-shared/version-history-scope.j
 import { isolateResourceLocations } from '../../helpers/resource-locations.js';
 
 const WORKSPACE_CONFIG = `{
+  "version": 5,
   "gates": { "enabled": true },
   "logging": { "level": "info" }
 }
@@ -39,6 +40,7 @@ const WORKSPACE_CONFIG = `{
 
 const PROJECT_CONFIG = `// the project's own settings
 {
+  "version": 5,
   "gates": { "enabled": false }, // this project reviews nothing
   "logging": { "level": "debug" },
 }
@@ -104,7 +106,7 @@ describe('cpm follows the server order for a project config', () => {
     });
 
     it('reads a project config.json when the project holds no config.jsonc', () => {
-      writeFileSync(projectJson(), '{ "gates": { "enabled": false } }\n', 'utf8');
+      writeFileSync(projectJson(), '{ "version": 5, "gates": { "enabled": false } }\n', 'utf8');
 
       const result = readConfig(workspace);
 
@@ -122,7 +124,7 @@ describe('cpm follows the server order for a project config', () => {
     it('lets MCP_CONFIG_PATH outrank the project config, as it does on the server', () => {
       writeFileSync(projectJsonc(), PROJECT_CONFIG, 'utf8');
       const explicit = join(root, 'explicit.json');
-      writeFileSync(explicit, '{ "gates": { "enabled": true } }\n', 'utf8');
+      writeFileSync(explicit, '{ "version": 5, "gates": { "enabled": true } }\n', 'utf8');
       locations.set({ configPath: explicit });
 
       expect(readConfig(workspace).configPath).toBe(explicit);
@@ -229,7 +231,7 @@ describe('cpm follows the server order for a project config', () => {
     });
 
     it('resets the project config under its own name and leaves the workspace config alone', () => {
-      writeFileSync(projectJson(), '{ "gates": { "enabled": false } }\n', 'utf8');
+      writeFileSync(projectJson(), '{ "version": 5, "gates": { "enabled": false } }\n', 'utf8');
 
       const result = resetConfig(workspace);
 

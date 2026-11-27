@@ -266,6 +266,7 @@ describe('an overlay that does not exist yet is still a root', () => {
   it('is in the lookup order, the loader watch list, and the change tracker roots — but no bundled tree is tracked', async () => {
     const packageRoot = await scratch('late-root-package');
     const workspace = await scratch('late-root-workspace');
+    const library = await scratch('late-root-library');
     for (const type of ['prompts', 'gates', 'frameworks', 'styles']) {
       await mkdir(path.join(packageRoot, 'resources', type), { recursive: true });
       await mkdir(path.join(workspace, 'resources', type), { recursive: true });
@@ -275,12 +276,14 @@ describe('an overlay that does not exist yet is still a root', () => {
     const locations = withResourceLocations({ workspace });
     cleanups.push(async () => locations.cleanup());
     const resolver = new PathResolver({ cli: {}, packageRoot });
+    // The overlay is a listed `paths.resources` entry whose type folders are not created yet.
+    resolver.readResourceLocationsFrom(() => ({ resources: [library, 'bundled'] }));
 
     for (const type of ['prompts', 'gates', 'frameworks', 'styles']) {
-      const overlay = path.join(workspace, type);
+      const overlay = path.join(library, type);
       expect(existsSync(overlay)).toBe(false);
       const roots = resolveResourceRoots(resolver, type, path.join(workspace, 'resources', type));
-      // Lowest first: the bundle, then the not-yet-created legacy overlay.
+      // Lowest first: the bundle, then the not-yet-created listed overlay.
       expect(roots.overlays).toEqual([roots.bundled, overlay]);
       expect(roots.lookupDirs.slice(0, 2)).toEqual([roots.primary, overlay]);
       // The present-tense reading still reports only what exists: the bundle alone.
@@ -316,17 +319,17 @@ describe('an overlay that does not exist yet is still a root', () => {
         additionalStylesDirs: styleRoots.lookupDirs,
       }).getWatchDirectories(),
     ];
-    expect(watched[0]).toContain(path.join(workspace, 'gates'));
-    expect(watched[1]).toContain(path.join(workspace, 'frameworks'));
-    expect(watched[2]).toContain(path.join(workspace, 'styles'));
+    expect(watched[0]).toContain(path.join(library, 'gates'));
+    expect(watched[1]).toContain(path.join(library, 'frameworks'));
+    expect(watched[2]).toContain(path.join(library, 'styles'));
 
     const configManager = {
       getResolvedPromptsDirectory: () => path.join(workspace, 'resources', 'prompts'),
       getGatesDirectory: () => path.join(workspace, 'resources', 'gates'),
     } as unknown as ConfigLoader;
     expect(trackedResourceRoots(configManager, resolver)).toEqual({
-      prompt: [path.join(workspace, 'resources', 'prompts'), path.join(workspace, 'prompts')],
-      gate: [path.join(workspace, 'resources', 'gates'), path.join(workspace, 'gates')],
+      prompt: [path.join(workspace, 'resources', 'prompts'), path.join(library, 'prompts')],
+      gate: [path.join(workspace, 'resources', 'gates'), path.join(library, 'gates')],
     });
   });
 });

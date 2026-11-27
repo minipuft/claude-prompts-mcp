@@ -41,7 +41,7 @@ scenarios:
     requests:
       - tool: prompt_engine
         args: { command: '>>overlay_probe' }
-    # `overlay_probe` exists ONLY in `<workspace>/prompts/`, never in the bundled tree, so serving
+    # `overlay_probe` exists ONLY in a listed `paths.resources` folder, never in the bundled tree, so serving
     # its body proves the overlay directory was merged. Asserting the MARKER rather than `ok:` is
     # what distinguishes "the overlay was loaded" from "some prompt by that name resolved" — and
     # the entire overlay branch is unreachable unless the workspace differs from the package root,

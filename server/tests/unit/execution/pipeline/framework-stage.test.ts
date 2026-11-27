@@ -549,7 +549,7 @@ describe('FrameworkResolutionStage', () => {
     test('applies framework override even when framework system is disabled', async () => {
       frameworkEnabled.mockReturnValue(false);
 
-      const context = new PromptRequestContext({ command: '@SCAMPER >>demo' } as any);
+      const context = new PromptRequestContext({ command: '^SCAMPER >>demo' } as any);
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = {
         strategy: 'prompt',
@@ -565,7 +565,7 @@ describe('FrameworkResolutionStage', () => {
         confidence: 0.9,
         commandType: 'single',
         metadata: {
-          originalCommand: '@SCAMPER >>demo',
+          originalCommand: '^SCAMPER >>demo',
           parseStrategy: 'symbolic',
           detectedFormat: 'symbolic',
           warnings: [],
@@ -627,7 +627,7 @@ describe('FrameworkResolutionStage', () => {
     });
 
     test('framework override with @operator becomes the user preference', async () => {
-      const context = new PromptRequestContext({ command: '@ReACT >>demo' } as any);
+      const context = new PromptRequestContext({ command: '^ReACT >>demo' } as any);
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = {
         strategy: 'prompt',
@@ -643,7 +643,7 @@ describe('FrameworkResolutionStage', () => {
         confidence: 0.9,
         commandType: 'single',
         metadata: {
-          originalCommand: '@ReACT >>demo',
+          originalCommand: '^ReACT >>demo',
           parseStrategy: 'symbolic',
           detectedFormat: 'symbolic',
           warnings: [],

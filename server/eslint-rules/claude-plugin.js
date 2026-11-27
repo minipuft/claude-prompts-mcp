@@ -677,38 +677,6 @@ const requireGuardMechanismVerdictRule = {
 };
 
 /**
- * `mode` reached as a property, in any of the four spellings a program can write it. Comments and
- * string literals are deliberately absent: they are the reason the script this rule replaces
- * carried ten allowlist entries, and prose describing the migration is not the migration.
- */
-const AUTOMATION_MODE_SELECTORS = [
-  "Property[computed=false][key.name='mode']",
-  "Property[computed=true][key.value='mode']",
-  "MemberExpression[computed=false][property.name='mode']",
-  "MemberExpression[computed=true][property.value='mode']",
-  "TSPropertySignature[computed=false][key.name='mode']",
-];
-
-const noDeprecatedAutomationModeRule = {
-  meta: {
-    type: 'problem',
-    docs: {
-      description:
-        'Forbids reading or declaring the deprecated automation `mode` property; script tools are configured with `trigger` + `confirm`',
-    },
-    schema: [],
-    messages: {
-      deprecatedMode:
-        'Script tools are configured with `trigger` + `confirm`, not `mode`. The deprecated field is still parsed and folded forward in core/script-schema.ts and core/script-definition-loader.ts, which this rule does not visit; new code must not read it.',
-    },
-  },
-  create(context) {
-    const report = (node) => context.report({ node, messageId: 'deprecatedMode' });
-    return Object.fromEntries(AUTOMATION_MODE_SELECTORS.map((selector) => [selector, report]));
-  },
-};
-
-/**
  * A gate that declares retirable exceptions must also audit them.
  *
  * `closedBy` is this repo's marker for "this exemption names what would let it be deleted" — the
@@ -922,7 +890,6 @@ export const rules = {
   'no-emojis': noEmojiCharactersRule,
   'no-compat-reexport-shim': noCompatReexportShimRule,
   'require-guard-mechanism-verdict': requireGuardMechanismVerdictRule,
-  'no-deprecated-automation-mode': noDeprecatedAutomationModeRule,
 };
 
 export default {

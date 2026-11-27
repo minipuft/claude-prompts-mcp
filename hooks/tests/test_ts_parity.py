@@ -58,7 +58,7 @@ class TestPromptAnnotationProjection:
 
         probes = [
             ">>Root",
-            "%clean @CAGEERF #analytical >>Parent/Child/Deep",
+            "%clean ^CAGEERF #analytical >>Parent/Child/Deep",
             ">>7-leading/root-child",
             ">>MiXeD/Unknown",
             ">>Parent/",

@@ -55,6 +55,7 @@ import {
   selectLaunchConfigFile,
   type ConfigLaunch,
 } from '#shared/utils/config-file-selection.js';
+import { unversionedConfigFileRefusal } from '#shared/utils/unversioned-config-file.js';
 
 // ── Result types ─────────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ function ambiguousConfigError(dir: string): string | undefined {
   }
   return (
     `Two config files in one directory: ${present.join(' and ')}. ` +
-    `Keep one — ${USER_CONFIG_FILENAMES[0]} is the 5.0 name, ${USER_CONFIG_FILENAMES[1]} is still read.`
+    'Keep one: the server reads either name, never both.'
   );
 }
 
@@ -171,10 +172,12 @@ export function readConfig(workspace: string): ConfigReadResult {
 }
 
 /**
- * The config DOCUMENT at `configPath`, exactly as written — no defaults applied, no legacy
- * spellings folded, no wire keys renamed. Callers that mean to write the file back must read it
- * through here rather than through a resolved runtime config, or the write persists values the
- * operator never typed.
+ * The config DOCUMENT at `configPath`, exactly as written — no defaults applied, no wire keys
+ * renamed. Callers that mean to write the file back must read it through here rather than through
+ * a resolved runtime config, or the write persists values the operator never typed.
+ *
+ * A document with no `version` is refused with the text the server refuses it with
+ * ({@link unversionedConfigFileRefusal}), so no `cpm` command reads or edits a pre-5.0 file.
  */
 export function readConfigFile(configPath: string): ConfigReadResult {
   const ambiguity = ambiguousConfigErrorForFile(configPath);
@@ -196,6 +199,10 @@ export function readConfigFile(configPath: string): ConfigReadResult {
       string,
       unknown
     >;
+    const refusal = unversionedConfigFileRefusal(configPath, config);
+    if (refusal !== undefined) {
+      return { success: false, configPath, error: refusal };
+    }
     return { success: true, config, configPath };
   } catch (error) {
     return {
@@ -403,7 +410,7 @@ export function writeConfigAtomic(configPath: string, config: Record<string, unk
  * Code owns every default now (`DEFAULT_CONFIG` in `src/infra/config/index.ts`); a config.json —
  * generated or hand-edited — holds only OVERRIDES. So this generator produces exactly what the
  * shipped `server/config.json` holds: the two document-level keys that decide how the file is
- * READ (`$schema` for editor validation, `version` for the loader's shape routing), and nothing a
+ * READ (`$schema` for editor validation, `version`, without which every reader refuses the file), and nothing a
  * setting could drift from. A fresh workspace still needs a config file a reader can find
  * (`runtime/startup.ts` refuses a package root with none) — it is just no longer a restatement of
  * defaults an operator never typed. `initConfig` writes the commented template instead, whose
@@ -556,7 +563,7 @@ export function validateConfigDocument(config: Record<string, unknown>): ConfigV
 
 /**
  * Document-level members that are legal in the file but are not settings — `$schema` is the
- * editor hint and `version` is the file-format discriminator the loader migrates. Both are
+ * editor hint and `version` is the file-format key every reader requires. Both are
  * deliberately absent from `CONFIG_VALID_KEYS` (see `_generated/config-keys.ts`), so without this
  * skip a perfectly valid config.json would warn about two of its own keys.
  */

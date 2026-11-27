@@ -56,6 +56,7 @@ async function serverWithStyleFrequency(frequency: number) {
   writeFileSync(
     path.join(workspace, 'config.json'),
     JSON.stringify({
+      version: 5,
       frameworks: {
         injection: { systemPrompt: { frequency: 1 }, styleGuidance: { frequency } },
       },

@@ -20,7 +20,7 @@ Evaluate against modern standards:
 
 ### 2.1 Language/Framework Standards
 
-- [ ] Follows current language idioms (not legacy patterns)
+- [ ] Follows current language idioms (not outdated patterns)
 - [ ] Uses framework features correctly (hooks, lifecycle, etc.)
 - [ ] Applies library best practices (check official docs if uncertain)
 

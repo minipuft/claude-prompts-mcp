@@ -3,8 +3,8 @@
 import path from 'path';
 
 import { DEFAULT_PROMPTS_CONFIG } from '#shared/types/core-config.js';
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 import { describeUnusableDirectory, PathSettingError } from '#shared/utils/path-setting.js';
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
 
 /** The reserved `paths.resources` entry: the package's own resources, not a path. */
 const BUNDLED_RESOURCES_ENTRY = 'bundled';
@@ -179,8 +179,8 @@ function assertWriteTarget(
  * that is not an object, a `paths.resources` that is not a non-empty list of distinct
  * non-empty strings, or a `paths.writeTarget` naming no folder a write may land in.
  *
- * Runs against the RAW record, before `translateConfigFile`, like `assertServerTransportIsStdio`
- * in `index.ts`, so a 4.x file is held to the same rule.
+ * Runs against the RAW record of a file that declares its `version`; `loadConfig` refuses one that
+ * does not before this runs.
  */
 export function assertResourceLocationSettings(
   rawConfig: Record<string, unknown>,
@@ -193,7 +193,7 @@ export function assertResourceLocationSettings(
     'directory' in prompts &&
     !namesDefaultPromptsDirectory(prompts['directory'], configPath)
   ) {
-    const notice = retirementNotice('config-prompts-directory');
+    const notice = retirementNotices.configPromptsDirectory;
     refuseConfigSetting(
       configPath,
       `sets "${notice.retired}" to ${describeConfigValue(prompts['directory'])}, which is no ` +

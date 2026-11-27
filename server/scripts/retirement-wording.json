@@ -1,0 +1,162 @@
+{
+  "phrases": [
+    {
+      "id": "still-accepted",
+      "pattern": "\\b(?:also still|still (?:works?|accepted|read|honou?red|supported|recogni[sz]ed))\\b",
+      "catches": "an old form said to keep working beside the current one: \"still works\", \"is still read\", \"is also still accepted\""
+    },
+    {
+      "id": "deprecated",
+      "pattern": "\\bdeprecat(?:ed|es|ion)\\b",
+      "catches": "a form labelled deprecated: accepted today and refused some day, which is the state the product does not have"
+    },
+    {
+      "id": "legacy",
+      "pattern": "\\blegacy\\b",
+      "catches": "a form labelled legacy: older than the current one and accepted beside it"
+    },
+    {
+      "id": "backward-compatible",
+      "pattern": "\\bbackwards?[- ]compatib",
+      "catches": "a form kept so that older input goes on working"
+    },
+    {
+      "id": "kept-for-compatibility",
+      "pattern": "\\b(?:kept|retained|remains?|accepted|supported|only) for (?:backwards? )?compatibility\\b",
+      "catches": "a form said to exist only so that older input is accepted"
+    },
+    {
+      "id": "fallback-to-old",
+      "pattern": "\\bfalls? ?back to the (?:old|previous|former|earlier)\\b",
+      "catches": "a reader that tries the old form when the current one is absent"
+    },
+    {
+      "id": "old-name-alias",
+      "pattern": "\\b(?:compat(?:ibility)?|old|former|previous) (?:name )?alias(?:es)?\\b",
+      "catches": "an old name kept as an alias of the current one"
+    }
+  ],
+  "exemptions": [
+    {
+      "id": "prompt-engine-options-prompt-values",
+      "phrase": "legacy",
+      "sites": [
+        {
+          "file": "docs/reference/mcp-tools.md",
+          "lines": 2
+        },
+        {
+          "file": "server/tooling/contracts/prompt-engine.json",
+          "lines": 2
+        },
+        {
+          "file": "server/src/mcp/contracts/schemas/_generated/prompt_engine.generated.ts",
+          "lines": 2
+        }
+      ],
+      "reason": "prompt_engine accepts prompt argument values in options as well as in inputs, which replaced it for that use; options also carries client_profile, which nothing else carries",
+      "asOf": "2026-11-27",
+      "removeWhen": "options is narrowed to execution hints and prompt values sent in it are refused through a ledger entry, or options is described without the word"
+    },
+    {
+      "id": "create-builder-camelcase-arguments",
+      "phrase": "legacy",
+      "sites": [
+        {
+          "file": "server/resources/prompts/examples/create_prompt/prompt.yaml",
+          "lines": 5
+        },
+        {
+          "file": "server/resources/prompts/examples/create_prompt/tools/prompt_builder/schema.json",
+          "lines": 5
+        },
+        {
+          "file": "server/resources/prompts/examples/create_prompt/user-message.md",
+          "lines": 1
+        },
+        {
+          "file": "server/resources/prompts/examples/create_gate/prompt.yaml",
+          "lines": 1
+        },
+        {
+          "file": "server/resources/prompts/examples/create_gate/tools/gate_builder/schema.json",
+          "lines": 1
+        },
+        {
+          "file": "server/resources/prompts/examples/create_gate/user-message.md",
+          "lines": 1
+        },
+        {
+          "file": "docs/guides/mcp-contract-maintenance.md",
+          "lines": 1
+        }
+      ],
+      "reason": "create_prompt and create_gate declare camelCase argument names their builders map to the snake_case fields; an argument a prompt does not declare is dropped without a word, so deleting the names would make old input vanish silently instead of being refused",
+      "asOf": "2026-11-27",
+      "removeWhen": "a prompt refuses an undeclared argument by name, after which the camelCase arguments are deleted and become ordinary unknown input"
+    },
+    {
+      "id": "metadata-status-deprecated",
+      "phrase": "deprecated",
+      "sites": [
+        {
+          "file": "server/src/mcp/contracts/schemas/types.ts",
+          "lines": 1
+        },
+        {
+          "file": "server/src/mcp/contracts/schemas/adapter.ts",
+          "lines": 1
+        },
+        {
+          "file": "server/src/mcp/tools/prompt-engine/utils/guide.ts",
+          "lines": 4
+        },
+        {
+          "file": "server/src/mcp/tools/resource-manager/prompt/prompt-resource-handler.ts",
+          "lines": 2
+        },
+        {
+          "file": "server/src/mcp/tools/resource-manager/prompt/services/prompt-discovery-processor.ts",
+          "lines": 2
+        },
+        {
+          "file": "server/src/mcp/tools/system-control/handlers/guide-action-handler.ts",
+          "lines": 2
+        }
+      ],
+      "reason": "the tool-contract parameter status and the action-metadata status both admit a deprecated value that the guides render as a badge; no contract and no metadata definition sets it",
+      "asOf": "2026-11-27",
+      "removeWhen": "the deprecated status value is deleted from both status vocabularies and from the guide renderers"
+    },
+    {
+      "id": "validation-error-array-signature",
+      "phrase": "legacy",
+      "sites": [
+        {
+          "file": "server/src/shared/utils/errorHandling.ts",
+          "lines": 1
+        }
+      ],
+      "reason": "ValidationError still takes an array of messages as its second argument and renders it under its own heading; no caller in server/src, cli/src or the tests passes one",
+      "asOf": "2026-11-27",
+      "removeWhen": "the array signature and its rendering branch are deleted from ValidationError"
+    },
+    {
+      "id": "outside-the-product",
+      "phrase": "deprecated",
+      "sites": [
+        {
+          "file": "server/resources/gates/workflow-changelog/guidance.md",
+          "lines": 1
+        },
+        {
+          "file": "server/resources/gates/workflow-integration/guidance.md",
+          "lines": 2
+        }
+      ],
+      "reason": "the word names something in the user's own project, not a spelling of this product: a Keep a Changelog category, and a marker the integration gate tells the reviewer to search the change for",
+      "asOf": "2026-11-27",
+      "removeWhen": "either gate's guidance stops naming the word"
+    }
+  ]
+}

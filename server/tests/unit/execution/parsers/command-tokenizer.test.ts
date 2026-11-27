@@ -86,7 +86,7 @@ describe('tokenizeCommand', () => {
       (delimiter) => {
         const rawArgs =
           'url:"https://example.test/a/b?x=1+2#frag" path:"/tmp/a/b" text:"--> ==> + ? # @ :: %  :full loop:true max:5 timeout:3"';
-        const command = `@CAGEERF >>Parent-2/3Child ${rawArgs} ${delimiter} >>next/deep`;
+        const command = `^CAGEERF >>Parent-2/3Child ${rawArgs} ${delimiter} >>next/deep`;
         const result = tokenizeCommand(command);
         expect(result.promptId).toBe('Parent-2/3Child');
         expect(result.rawArgs).toBe(rawArgs);
@@ -195,7 +195,7 @@ describe('tokenizeCommand', () => {
   // =========================================================================
   // Gate operator (::)
   // =========================================================================
-  describe('gate operator (:: and =)', () => {
+  describe('gate operator (::)', () => {
     test('detects anonymous quoted gate', () => {
       const result = tokenizeCommand('>>analyze :: "cite sources"');
       const gates = result.operators.filter((o) => o.type === 'gate');
@@ -217,10 +217,9 @@ describe('tokenizeCommand', () => {
       expect(gates[0]?.value).toBe('code-quality');
     });
 
-    test('detects deprecated = gate operator', () => {
+    test('does not read " = " as a gate operator', () => {
       const result = tokenizeCommand('>>analyze = "check quality"');
-      const gates = result.operators.filter((o) => o.type === 'gate');
-      expect(gates).toHaveLength(1);
+      expect(result.operators.filter((o) => o.type === 'gate')).toHaveLength(0);
     });
 
     test('does not detect :: inside quotes', () => {
@@ -244,35 +243,40 @@ describe('tokenizeCommand', () => {
   });
 
   // =========================================================================
-  // Framework operator (@)
+  // Framework operator (^)
   // =========================================================================
-  describe('framework operator (@)', () => {
+  describe('framework operator (^)', () => {
     test('detects framework at start', () => {
-      const result = tokenizeCommand('@CAGEERF >>analyze');
+      const result = tokenizeCommand('^CAGEERF >>analyze');
       const fw = result.operators.find((o) => o.type === 'framework');
       expect(fw).toBeDefined();
       expect(fw?.value).toBe('CAGEERF');
     });
 
     test('detects framework after whitespace', () => {
-      const result = tokenizeCommand('>>analyze @ReACT');
+      const result = tokenizeCommand('>>analyze ^ReACT');
       const fw = result.operators.find((o) => o.type === 'framework');
       expect(fw).toBeDefined();
       expect(fw?.value).toBe('ReACT');
     });
 
-    test('skips @path/reference patterns', () => {
-      const result = tokenizeCommand('>>analyze @docs/path');
+    test('skips ^path/reference patterns', () => {
+      const result = tokenizeCommand('>>analyze ^docs/path');
       expect(result.operators.filter((o) => o.type === 'framework')).toHaveLength(0);
     });
 
-    test('skips @file.ext patterns', () => {
-      const result = tokenizeCommand('>>analyze @config.json');
+    test('skips ^file.ext patterns', () => {
+      const result = tokenizeCommand('>>analyze ^config.json');
       expect(result.operators.filter((o) => o.type === 'framework')).toHaveLength(0);
     });
 
-    test('does not detect @ inside quotes', () => {
-      const result = tokenizeCommand('>>analyze content:"use @CAGEERF here"');
+    test('does not read @word as a framework operator', () => {
+      const result = tokenizeCommand('@CAGEERF >>analyze');
+      expect(result.operators.filter((o) => o.type === 'framework')).toHaveLength(0);
+    });
+
+    test('does not detect ^ inside quotes', () => {
+      const result = tokenizeCommand('>>analyze content:"use ^CAGEERF here"');
       expect(result.operators.filter((o) => o.type === 'framework')).toHaveLength(0);
     });
   });
@@ -424,14 +428,14 @@ describe('tokenizeCommand', () => {
     });
 
     test('framework + chain', () => {
-      const result = tokenizeCommand('@CAGEERF >>analyze --> >>summarize');
+      const result = tokenizeCommand('^CAGEERF >>analyze --> >>summarize');
       expect(opTypes(result.operators)).toContain('framework');
       expect(opTypes(result.operators)).toContain('chain');
       expect(result.promptId).toBe('analyze');
     });
 
     test('style + framework + chain', () => {
-      const result = tokenizeCommand('#analytical @CAGEERF >>analyze --> >>summarize');
+      const result = tokenizeCommand('#analytical ^CAGEERF >>analyze --> >>summarize');
       expect(opTypes(result.operators)).toContain('style');
       expect(opTypes(result.operators)).toContain('framework');
       expect(opTypes(result.operators)).toContain('chain');
@@ -489,8 +493,8 @@ describe('tokenizeCommand', () => {
     });
 
     test('strips framework operator from cleaned command', () => {
-      const result = tokenizeCommand('@CAGEERF >>analyze some args');
-      expect(result.cleanedCommand).not.toContain('@CAGEERF');
+      const result = tokenizeCommand('^CAGEERF >>analyze some args');
+      expect(result.cleanedCommand).not.toContain('^CAGEERF');
       expect(result.cleanedCommand).toContain('>>analyze');
     });
 
@@ -514,7 +518,7 @@ describe('tokenizeCommand', () => {
     });
 
     test('normalizes whitespace after stripping', () => {
-      const result = tokenizeCommand('@CAGEERF  #analytical  >>analyze');
+      const result = tokenizeCommand('^CAGEERF  #analytical  >>analyze');
       // After stripping framework and style, no double spaces should remain
       expect(result.cleanedCommand).not.toContain('  ');
     });

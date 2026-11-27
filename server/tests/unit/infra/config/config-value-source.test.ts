@@ -216,38 +216,6 @@ describe('config value source labeling (getConfigValueWithSource / listConfigKey
     });
   });
 
-  // The snapshot `getConfigValueWithSource` labels from is taken AFTER the 4.x translation, so a
-  // key the operator wrote in a 4.x spelling is reported under its 5.0 name. Before that order was
-  // fixed, the raw snapshot held the 4.x spelling and the merged config held the 5.0 one, and
-  // neither name answered with both a value and a 'file' label.
-  describe('a 4.x file is labelled under its 5.0 key names', () => {
-    it('reports a translated flat key as "file" under the nested 5.0 name', async () => {
-      const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-      const fourXPath = path.join(tempDir, 'four-x.json');
-      await writeFile(
-        fourXPath,
-        JSON.stringify({ frameworks: { enabled: true, systemPromptFrequency: 7 } }),
-        'utf8'
-      );
-
-      const fourXManager = new ConfigLoader(fourXPath, undefined, { schemaPath: SCHEMA_PATH });
-      await fourXManager.loadConfig();
-
-      expect(
-        fourXManager.getConfigValueWithSource('frameworks.injection.systemPrompt.frequency')
-      ).toMatchObject({ value: 7, source: 'file' });
-      // The 4.x spelling is not a config key at all any more — it is not in the schema, so it is
-      // not enumerable, and asking for it answers with no value rather than inventing one. (The
-      // handler refuses an undeclared key before it ever gets here; this is the loader's own
-      // answer for a path nothing declares.)
-      expect(
-        fourXManager.getConfigValueWithSource('frameworks.systemPromptFrequency')
-      ).toMatchObject({ value: undefined, source: 'default' });
-
-      warn.mockRestore();
-    });
-  });
-
   // The cache-sharing gate (row 2.12): `listConfigKeys()` used to re-read and re-parse
   // config.schema.json on every call. It now goes through `getParsedConfigSchema`
   // (config-schema-validator.ts), the same mtime-keyed cache entry the compiled AJV validator is

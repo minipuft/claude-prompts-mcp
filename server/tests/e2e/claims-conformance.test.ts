@@ -114,7 +114,7 @@ interface Scenario {
     /**
      * The response must SUCCEED and its text must contain this substring.
      *
-     * Exists because `ok: true` cannot see a silent no-op. `@CAGEERF>>prompt` (no space) ran the
+     * Exists because `ok: true` cannot see a silent no-op. `^CAGEERF>>prompt` (no space) ran the
      * prompt and returned success while never applying the framework — so an `ok` assertion
      * passed identically before and after the pattern was fixed. Asserting on content is the only
      * way a scenario observes whether the claimed EFFECT happened, rather than merely that the
@@ -349,10 +349,12 @@ function applyCaptures(
  *   `<ws>/resources/`  a full copy of the bundled tree. `getResourcesPath()` prefers
  *                      `<workspace>/resources` over the package default (paths.ts:181-188), so
  *                      every mutating write lands here instead of in the repo.
- *   `<ws>/prompts/`    an overlay-only category. `getOverlayResourceDirs('prompts', primary)`
- *                      returns `<ws>/prompts` because it exists and differs from the primary dir
- *                      `<ws>/resources/prompts` (paths.ts:359-366), so the loader merges it on
- *                      top of the copied tree — which is the documented overlay claim.
+ *   `<ws>/overlay-library/prompts/`
+ *                      an overlay-only category, reached through the `paths.resources` entry the
+ *                      workspace config lists. `getOverlayResourceDirs('prompts', primary)`
+ *                      returns it because it exists and differs from the primary dir
+ *                      `<ws>/resources/prompts`, so the loader merges it on top of the copied
+ *                      tree — which is the documented overlay claim.
  *
  * Both paths are dead code on the shared server: it runs from the package root with no
  * `paths.resources` list, so the bundle is its only location and that location is the primary,
@@ -389,11 +391,19 @@ async function buildIsolatedWorkspace(): Promise<string> {
   };
   cfg.resources = { ...(cfg.resources ?? {}), registerWithMcp: true };
   cfg.gates = { ...(cfg.gates ?? {}), harnessCovers: ['conformance-harness-subject'] };
+  // The overlay is a listed `paths.resources` entry; `bundled` keeps the shipped set where it was.
+  (cfg as Record<string, unknown>)['paths'] = { resources: ['./overlay-library', 'bundled'] };
   await fs.writeFile(path.join(ws, 'config.json'), JSON.stringify(cfg, null, 2), 'utf8');
 
   // The overlay fixture. `overlay_probe` exists ONLY here — never in the bundled tree — so a
   // scenario that finds it has proven the overlay directory was merged, not that the copy worked.
-  const overlayDir = path.join(ws, 'prompts', 'conformance-overlay', 'overlay_probe');
+  const overlayDir = path.join(
+    ws,
+    'overlay-library',
+    'prompts',
+    'conformance-overlay',
+    'overlay_probe'
+  );
   await fs.mkdir(overlayDir, { recursive: true });
   await fs.writeFile(
     path.join(overlayDir, 'prompt.yaml'),

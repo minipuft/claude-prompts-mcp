@@ -136,6 +136,7 @@ describe('a paths.resources list', () => {
 
     expect(env).toEqual({ MCP_WORKSPACE: ws });
     expect(JSON.parse(readFileSync(path.join(ws, 'config.jsonc'), 'utf8'))).toEqual({
+      version: 5,
       paths: { resources: ['bundled', '/tmp/library'] },
     });
 

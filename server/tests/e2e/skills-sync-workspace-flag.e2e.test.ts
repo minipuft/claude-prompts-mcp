@@ -107,7 +107,7 @@ describe('a server started with --workspace and no MCP_WORKSPACE resolves skills
 
     await writeFile(
       path.join(workspace, 'skills-sync.yaml'),
-      `exports:\n  - prompt:general/${PROMPT_ID}\n`
+      `registrations:\n  claude-code:\n    user:\n      - prompt:general/${PROMPT_ID}\n`
     );
   }, 30_000);
 

@@ -262,6 +262,87 @@ describe('a path setting that cannot be used refuses startup', () => {
     expect(existsSync(runtimeRoot)).toBe(false);
   }, 30_000);
 
+  /** A workspace holding one prompt at `<where>/demo/hello/prompt.yaml`, the layout the old resolver served. */
+  async function workspaceWithPrompt(name: string, where: string): Promise<string> {
+    const workspace = path.join(dir, name);
+    const promptDir = path.join(workspace, where, 'demo', 'hello');
+    await mkdir(promptDir, { recursive: true });
+    await writeFile(
+      path.join(promptDir, 'prompt.yaml'),
+      'id: hello\nname: hello\ncategory: demo\ndescription: probe\nuserMessageTemplate: hi\n'
+    );
+    return workspace;
+  }
+
+  const transports: Array<[string, string[], 'pipe' | 'ignore']> = [
+    ['STDIO', ['--transport=stdio'], 'pipe'],
+    ['Streamable HTTP', ['--transport=streamable-http'], 'ignore'],
+  ];
+
+  it.each(transports)(
+    '%s: a workspace root that holds a prompts folder exits 1 naming the move, without serving or creating the runtime root',
+    async (_transport, args, stdin) => {
+      const workspace = await workspaceWithPrompt(`root-layout-${stdin}`, 'prompts');
+      const runtimeRoot = path.join(dir, `root-layout-runtime-${stdin}`);
+      const port = await getAvailablePort();
+
+      const run = await runServer(
+        args,
+        { PORT: String(port), ...resourceLocationEnv({ workspace, runtimeRoot }) },
+        { stdin }
+      );
+
+      expect(run.timedOut).toBe(false);
+      expect(run.exitCode).toBe(1);
+      expect(run.stdout).toBe('');
+      expect(run.stderr).toContain(
+        `Refusing to start: resource folders at the workspace root are no longer read (retired in 6.0.0); ${workspace} holds resources in ${workspace}/prompts.`
+      );
+      expect(run.stderr).toContain(`Move: ${workspace}/prompts -> ${workspace}/resources/prompts`);
+      expect(run.stderr.split('Refusing to start').length - 1).toBe(1);
+      expect(existsSync(runtimeRoot)).toBe(false);
+    },
+    30_000
+  );
+
+  it('STDIO: the resources/ layout, beside an unrelated scripts/ folder and an empty prompts/, starts and answers initialize', async () => {
+    const workspace = await workspaceWithPrompt(
+      'root-layout-control',
+      path.join('resources', 'prompts')
+    );
+    await mkdir(path.join(workspace, 'scripts'), { recursive: true });
+    await writeFile(path.join(workspace, 'scripts', 'build.sh'), 'echo hi\n');
+    await mkdir(path.join(workspace, 'prompts'), { recursive: true });
+
+    const run = await runServer(
+      ['--transport=stdio'],
+      resourceLocationEnv({
+        workspace,
+        runtimeRoot: path.join(dir, 'root-layout-control-runtime'),
+      }),
+      {
+        stdin: 'pipe',
+        stdinFrames: [
+          {
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'initialize',
+            params: {
+              protocolVersion: '2025-06-18',
+              capabilities: {},
+              clientInfo: { name: 'root-layout-e2e', version: '0' },
+            },
+          },
+        ],
+        settled: ({ stdout }) => stdout.includes('"id":1'),
+      }
+    );
+
+    expect(run.timedOut).toBe(false);
+    expect(run.stderr).not.toContain('Refusing to start');
+    expect(run.stdout).toContain('"id":1');
+  }, 30_000);
+
   it('STDIO: an unusable packaged config falls back with stdout carrying only protocol frames', async () => {
     // The packaged config is the one fallback left, so this is where the channel is pinned. Before
     // the fix, ConfigLoader wrote "Using default configuration" to stdout ahead of the initialize

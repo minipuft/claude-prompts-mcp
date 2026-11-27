@@ -22,6 +22,11 @@ import { basename, join, resolve, isAbsolute } from 'path';
 import type { ServerCliArgs } from './cli.js';
 
 import {
+  describeRetiredRootLayout,
+  findRetiredRootFolders,
+} from '#cli-shared/retired-root-layout.js';
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
+import {
   configFileFormat,
   findWorkspaceConfigFiles,
   parseConfigText,
@@ -37,7 +42,6 @@ import {
   type PathSetting,
 } from '#shared/utils/path-setting.js';
 import { deriveProjectDir } from '#shared/utils/project-scope.js';
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
 import {
   RUNTIME_STATE_DIR_NAME,
   STATE_DB_FILE_NAME,
@@ -334,7 +338,7 @@ export class PathResolver {
    * Get the resources base directory: the profile's `${workspace}/resources` when it exists, else
    * the package's `${packageRoot}/resources`.
    *
-   * This is the resource base; each type getter also preserves existing legacy workspace dirs.
+   * This is the resource base; each type getter resolves beneath it.
    */
   getResourcesPath(): string {
     if (this.cache.resources) return this.cache.resources;
@@ -370,7 +374,7 @@ export class PathResolver {
   assertUsablePathSettings(): void {
     const removedResourcesPath = process.env['MCP_RESOURCES_PATH'];
     if (removedResourcesPath !== undefined && removedResourcesPath !== '') {
-      const notice = retirementNotice('env-mcp-resources-path');
+      const notice = retirementNotices.envMcpResourcesPath;
       throw new PathSettingError(
         [
           `Refusing to start: ${notice.retired} is no longer read (retired in ${notice.refusedIn}).`,
@@ -386,6 +390,8 @@ export class PathResolver {
       });
     }
 
+    this.assertNoRetiredRootLayout();
+
     this.getConfigPath();
     if (this.readExplicitConfigSource() === undefined) {
       // The project directory outranks the workspace, so its config is judged first.
@@ -395,6 +401,19 @@ export class PathResolver {
         this.assertUsableWorkspaceConfig(workspace);
       }
     }
+  }
+
+  /**
+   * Refuse a workspace whose root still holds a `<type>/` folder with resources in it: the server
+   * serves `<workspace>/resources/<type>/` only, and starting without the folder would drop what
+   * it holds with no word to the operator. Only the workspace had that second layout; the
+   * project's `.claude-prompts/` and each `paths.resources` entry were always `<folder>/<type>`.
+   */
+  private assertNoRetiredRootLayout(): void {
+    const workspace = this.getWorkspace();
+    const folders = findRetiredRootFolders(workspace);
+    if (folders.length === 0) return;
+    throw new PathSettingError(describeRetiredRootLayout(workspace, folders, 'Refusing to start:'));
   }
 
   /** The workspace path: flag, then `MCP_WORKSPACE`, then `CLAUDE_PLUGIN_DATA`; an empty value counts as unset. */
@@ -442,7 +461,7 @@ export class PathResolver {
         resolved: this.getWorkspace(),
         problem: `holds both config.jsonc (${jsoncPath}) and config.json (${jsonPath})`,
         expected: 'a single config file',
-        remedy: `keep config.jsonc, the current name, and remove config.json (also still read)`,
+        remedy: 'keep one of the two files: the server reads either name, never both',
       })
     );
   }
@@ -463,7 +482,7 @@ export class PathResolver {
       throw new PathSettingError(
         [
           `Refusing to start: the project workspace ${projectWorkspace} holds both config.jsonc (${jsoncPath}) and config.json (${jsonPath}).`,
-          `Expected a single config file there, or keep config.jsonc, the current name, and remove config.json (also still read).`,
+          'Expected a single config file there: keep one of the two, the server reads either name, never both.',
         ].join('\n')
       );
     }
@@ -702,9 +721,7 @@ export class PathResolver {
    *    project. Listed before `.claude-prompts/` exists too:
    *    loaders read it as empty and the file observer watches it, so a folder created while the
    *    server runs is served without a restart. It is the write root only once it exists.
-   * 2. the profile's own folder ({@link resolveResourceSubdir}), then the custom workspace's
-   *    other layout beside it, so a
-   *    workspace whose collection sits in both `resources/<type>` and `<type>` keeps both.
+   * 2. the profile's own folder ({@link resolveResourceSubdir}).
    * 3. each `paths.resources` entry as `<entry>/<type>`, in the file's order.
    * 4. the bundle at the position `"bundled"` is listed; appended last when no list is in force;
    *    absent when a list is in force and leaves `"bundled"` out (`bundledImplicit`).
@@ -735,22 +752,6 @@ export class PathResolver {
     if (profile.resolved !== bundledDir) {
       candidates.push({ path: profile.resolved, kind: 'profile', source: profile.source });
     }
-    if (this.isUsingCustomWorkspace()) {
-      const workspace = this.getWorkspace();
-      candidates.push(
-        {
-          path: join(workspace, 'resources', resourceType),
-          kind: 'profile',
-          source: `workspace resources/${resourceType}/`,
-        },
-        {
-          path: join(workspace, resourceType),
-          kind: 'profile',
-          source: `workspace ${resourceType}/ (legacy)`,
-        }
-      );
-    }
-
     const configured = this.configuredPaths().resources;
     configured.forEach((entry, index) => {
       candidates.push(
@@ -891,8 +892,8 @@ export class PathResolver {
     const projectWorkspace = this.getProjectWorkspace();
     if (projectWorkspace !== undefined) return join(projectWorkspace, 'resources', subdir);
     const { writeTarget } = this.configuredPaths();
-    // Naming the profile's own folder is the unset answer: its legacy `<workspace>/<type>` layout
-    // is kept rather than flattened to `<folder>/<type>`.
+    // Naming the profile's own folder is the unset answer: it is the profile's own resolution,
+    // not a listed folder, so it is not flattened to `<folder>/<type>`.
     if (writeTarget !== undefined && writeTarget !== this.getProfileResourcesDir()) {
       return join(writeTarget, subdir);
     }
@@ -911,11 +912,10 @@ export class PathResolver {
    *
    * A custom workspace resolves inside the workspace:
    *   1. ${workspace}/resources/${subdir}/ (if exists)
-   *   2. ${workspace}/${subdir}/ (legacy, if exists, so an existing collection does not split)
-   *   3. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
+   *   2. ${workspace}/resources/${subdir}/ (not created yet; the first write creates it)
    *
-   * Without a custom workspace, existing resource and legacy dirs retain their priority, then the
-   * package resource directory is the default.
+   * Without a custom workspace, an existing resources dir keeps its priority, then the package
+   * resource directory is the default.
    *
    * A write root may not exist yet. Existence-based fallback would send first writes into the
    * install directory, which a plugin update replaces.
@@ -923,16 +923,10 @@ export class PathResolver {
    * (`getBundledResourceDir`).
    */
   private resolveResourceSubdir(subdir: string): { resolved: string; source: string } {
-    const workspace = this.getWorkspace();
-    const legacyDir = join(workspace, subdir);
-
     if (this.isUsingCustomWorkspace()) {
-      const workspaceDir = join(workspace, 'resources', subdir);
+      const workspaceDir = join(this.getWorkspace(), 'resources', subdir);
       if (existsSync(workspaceDir)) {
         return { resolved: workspaceDir, source: `workspace resources/${subdir}/` };
-      }
-      if (existsSync(legacyDir)) {
-        return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
       }
       return {
         resolved: workspaceDir,
@@ -943,10 +937,6 @@ export class PathResolver {
     const resourcesDir = join(this.getResourcesPath(), subdir);
     if (existsSync(resourcesDir)) {
       return { resolved: resourcesDir, source: `resources/${subdir}/` };
-    }
-
-    if (existsSync(legacyDir)) {
-      return { resolved: legacyDir, source: `workspace ${subdir}/ (legacy)` };
     }
 
     return {

@@ -126,7 +126,7 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
     workspace = path.join(tmpRoot, 'workspace');
     bundledRoot = path.join(packageRoot, 'resources', 'styles');
     primaryRoot = path.join(workspace, 'resources', 'styles');
-    overlayRoot = path.join(workspace, 'styles');
+    overlayRoot = path.join(tmpRoot, 'library', 'styles');
     for (const dir of [bundledRoot, primaryRoot, overlayRoot]) mkdirSync(dir, { recursive: true });
 
     // Never touched: distinguishes "the broken one was dropped" from "everything was dropped".
@@ -146,6 +146,10 @@ describe('one style loader instance, and the hot reload refreshes it (P4.31)', (
 
     locations.set({ workspace });
     pathResolver = new PathResolver({ cli: {}, packageRoot });
+    // The overlay is a `paths.resources` entry: `<tmpRoot>/library/styles`, listed before the bundle.
+    pathResolver.readResourceLocationsFrom(() => ({
+      resources: [path.join(tmpRoot, 'library'), 'bundled'],
+    }));
 
     // Exactly what `runtime/module-initializer.ts` wires: the roots resolved once through
     // `PathResolver`, handed to the SINGLETON under the two `loaderDirsConfig` keys.

@@ -1,11 +1,12 @@
 /**
- * `validate:retirements` with a planted case per check (1 to 5), each asserting the failure
+ * `validate:retirements` with a planted case per check (1 to 6), each asserting the failure
  * names the entry or the file it is about, then the live tree as the clean case. The checks are pure
  * functions over entries, sites and driver ids, so every planted case is data; the site and
  * driver scanners are driven over planted source text, including a commented-out call that must
- * not count as a site.
+ * not count as a site. Check 6's code scanner is driven over a planted git repository holding
+ * TypeScript and Python sources, tests and comments, through the real Python parser.
  */
-import { describe, expect, it } from '@jest/globals';
+import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,6 +15,17 @@ import { fileURLToPath } from 'node:url';
 
 import { renderUpgradingPage, UPGRADING_PAGE } from '../../../scripts/generate-retirements-doc.js';
 import { expiryOutcomes } from '../../../scripts/lib/retirement-expiry.js';
+import { listRetirements } from '../../../scripts/lib/retirement-ledger.js';
+import {
+  projectionMember,
+  renderRetirementProjection,
+  RETIREMENT_PROJECTION,
+} from '../../../scripts/lib/retirement-projection.js';
+import {
+  findTypeScriptStrings,
+  loadWordingRules,
+  scanCodeStrings,
+} from '../../../scripts/lib/third-state-wording.js';
 import { selectUserFacingFiles } from '../../../scripts/lib/user-facing-scope.js';
 import {
   DRIVER_FILE,
@@ -23,7 +35,6 @@ import {
   scanRefusalSites,
   scanUserFacingText,
 } from '../../../scripts/validate-retirements.js';
-import { listRetirements } from '../../../src/shared/utils/retirement-notice.js';
 
 import type { RetirementCheckInput } from '../../../scripts/validate-retirements.js';
 
@@ -42,21 +53,40 @@ const OTHER = {
   docPattern: null,
 };
 const PAGE = '# Upgrading\n\nplanted page\n';
+const PROJECTION = 'export const plantedEntry = {};\n';
+const PROJECTION_FILE = `server/${RETIREMENT_PROJECTION}`;
+const PHRASES = loadWordingRules(REPO_ROOT).phrases;
+const TWO_STATES = 'The product has two states for a spelling, accepted or refused';
+
+const git = (cwd: string, ...args: string[]): void => {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))
+  );
+  execFileSync('git', args, { cwd, env, stdio: 'ignore' });
+};
+const plant = (root: string, file: string, text: string): void => {
+  mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+  writeFileSync(path.join(root, file), text);
+};
 
 /** A clean planted input: two entries, each with a site and a driver, before any date. */
 function clean(overrides: Partial<RetirementCheckInput> = {}): RetirementCheckInput {
   return {
     entries: [ENTRY, OTHER],
     sites: [
-      { id: ENTRY.id, file: 'server/src/a.ts', line: 3 },
-      { id: OTHER.id, file: 'cli/src/b.ts', line: 9 },
+      { member: 'plantedEntry', file: 'server/src/a.ts', line: 3 },
+      { member: 'otherEntry', file: 'cli/src/b.ts', line: 9 },
     ],
     driverIds: [ENTRY.id, OTHER.id],
     texts: [
       { file: 'docs/guides/clean.md', lines: [{ line: 1, text: 'Describe the current form.' }] },
     ],
+    codeStrings: [],
+    wording: { phrases: PHRASES, exemptions: [] },
     expectedPage: PAGE,
     upgradingPage: PAGE,
+    expectedProjection: PROJECTION,
+    projection: PROJECTION,
     today: '2026-11-27',
     packageVersion: '6.0.0',
     ...overrides,
@@ -75,46 +105,56 @@ describe('validate:retirements', () => {
   describe('check 1: entries and refusal sites', () => {
     it('fails an entry no site refuses, naming it', () => {
       const failures = runRetirementChecks(
-        clean({ sites: [{ id: OTHER.id, file: 'cli/src/b.ts', line: 9 }] })
+        clean({ sites: [{ member: 'otherEntry', file: 'cli/src/b.ts', line: 9 }] })
       ).failures;
 
       expect(failures).toHaveLength(1);
       expect(failures[0]).toMatchObject({ check: 1, subject: ENTRY.id });
-      expect(failures[0]?.message).toContain(`retirementNotice('${ENTRY.id}')`);
+      expect(failures[0]?.message).toContain('no refusal site reads plantedEntry');
     });
 
-    it('fails a site whose id names no entry, naming the id and the site', () => {
-      const sites = [...clean().sites, { id: 'unknown-entry', file: 'server/src/c.ts', line: 12 }];
+    it('fails a site whose member names no entry, naming the member and the site', () => {
+      const sites = [
+        ...clean().sites,
+        { member: 'unknownEntry', file: 'server/src/c.ts', line: 12 },
+      ];
       const messages = failureMessages(clean({ sites }));
 
       expect(messages).toEqual([
-        "server/src/c.ts:12: retirementNotice('unknown-entry') names no entry in retirements.json.",
+        'server/src/c.ts:12: unknownEntry names no entry in retirements.json.',
       ]);
     });
 
-    it('fails a site that passes a non-literal id', () => {
-      const sites = [...clean().sites, { id: null, file: 'server/src/d.ts', line: 4 }];
+    it('fails a site that names no member', () => {
+      const sites = [...clean().sites, { member: null, file: 'server/src/d.ts', line: 4 }];
 
       expect(failureMessages(clean({ sites }))).toEqual([
-        'server/src/d.ts:4: retirementNotice() is called without a string-literal id, which no entry can be joined to.',
+        'server/src/d.ts:4: the retirement projection is used without naming one member, which no entry can be joined to. Import it as a namespace and read the entry by name.',
       ]);
     });
 
-    it('reads calls from the syntax tree: a commented-out call and a quoted id are not sites', () => {
+    it('reads uses from the syntax tree: a commented-out read and a quoted name are not sites', () => {
       const text = [
-        "import { retirementNotice } from '#shared/utils/retirement-notice.js';",
-        "// retirementNotice('in-a-line-comment');",
-        "/* retirementNotice('in-a-block-comment'); */",
-        'const prose = "call retirementNotice(\'in-a-string\') at the boundary";',
-        "const notice = retirementNotice('live-call');",
-        'const dynamic = retirementNotice(idFromSomewhere);',
-        "const viaNamespace = ledger.retirementNotice('namespaced-call');",
+        "import * as notices from '#shared/utils/_generated/retirement-notices.js';",
+        '// notices.inALineComment;',
+        '/* notices.inABlockComment; */',
+        'const prose = "read notices.inAString at the boundary";',
+        'const notice = notices.liveRead;',
+        'const dynamic = notices[idFromSomewhere];',
+        "const quoted = notices['quotedRead'];",
+        'const whole = describe(notices);',
+        "import { namedImport } from './_generated/retirement-notices.js';",
+        "export * from '../utils/_generated/retirement-notices.js';",
+        'const unrelated = other.liveRead;',
       ].join('\n');
 
       expect(findRetirementSites('server/src/x.ts', text)).toEqual([
-        { id: 'live-call', file: 'server/src/x.ts', line: 5 },
-        { id: null, file: 'server/src/x.ts', line: 6 },
-        { id: 'namespaced-call', file: 'server/src/x.ts', line: 7 },
+        { member: 'liveRead', file: 'server/src/x.ts', line: 5 },
+        { member: null, file: 'server/src/x.ts', line: 6 },
+        { member: 'quotedRead', file: 'server/src/x.ts', line: 7 },
+        { member: null, file: 'server/src/x.ts', line: 8 },
+        { member: null, file: 'server/src/x.ts', line: 9 },
+        { member: null, file: 'server/src/x.ts', line: 10 },
       ]);
     });
   });
@@ -155,17 +195,6 @@ describe('validate:retirements', () => {
   });
 
   describe('check 3: retired spellings in user-facing text', () => {
-    const git = (cwd: string, ...args: string[]): void => {
-      const env = Object.fromEntries(
-        Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))
-      );
-      execFileSync('git', args, { cwd, env, stdio: 'ignore' });
-    };
-    const plant = (root: string, file: string, text: string): void => {
-      mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-      writeFileSync(path.join(root, file), text);
-    };
-
     it('fails a guide that names a retired spelling, naming the file, the line and the entry', () => {
       const texts = [
         {
@@ -278,6 +307,48 @@ describe('validate:retirements', () => {
       ]);
     });
 
+    it('fails a hand-edited runtime projection, naming the file and the command to run', () => {
+      const failures = runRetirementChecks(
+        clean({ projection: PROJECTION.replace('plantedEntry', 'handEdited') })
+      ).failures;
+
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toMatchObject({ check: 5, subject: PROJECTION_FILE });
+      expect(failures[0]?.message).toContain('npm --prefix server run generate:retirements-doc');
+    });
+
+    it('fails a missing runtime projection', () => {
+      expect(runRetirementChecks(clean({ projection: null })).failures).toMatchObject([
+        { check: 5, subject: PROJECTION_FILE },
+      ]);
+    });
+
+    it('fails a projection that lacks a ledger entry, or holds one the ledger does not', () => {
+      const entries = listRetirements();
+      const current = renderRetirementProjection(entries);
+      const missing = renderRetirementProjection(entries.slice(1));
+      const extra = renderRetirementProjection([
+        ...entries,
+        { ...entries[0]!, id: 'not-in-the-ledger' },
+      ]);
+
+      for (const onDisk of [missing, extra]) {
+        expect(
+          runRetirementChecks(clean({ expectedProjection: current, projection: onDisk })).failures
+        ).toMatchObject([{ check: 5, subject: PROJECTION_FILE }]);
+      }
+    });
+
+    it('renders one exported constant per ledger entry, named after its id', () => {
+      const projection = renderRetirementProjection(listRetirements());
+      const exported = [...projection.matchAll(/^export const (\w+): RetirementNotice/gm)].map(
+        (match) => match[1]
+      );
+
+      expect(exported).toHaveLength(listRetirements().length);
+      expect(exported).toContain('configFileUnversioned');
+    });
+
     it('renders newest refusal first, then by spelling, with one row per entry', () => {
       const page = renderUpgradingPage(listRetirements());
       const rows = page
@@ -288,6 +359,50 @@ describe('validate:retirements', () => {
       expect(rows[1]).toContain('6.0.0');
       expect(rows[rows.length - 1]).toContain('3.2.0');
       expect(page).toContain('npm --prefix server run generate:retirements-doc');
+    });
+  });
+
+  describe('the generated page', () => {
+    const PAGE_ENTRY = {
+      id: 'page-entry',
+      kind: 'config-key' as const,
+      retired: 'old.key',
+      replacement: 'new.key',
+      refusedIn: '6.0.0',
+      forgetAfter: '2027-06-01',
+      docPattern: null,
+      docPatternReason: 'planted',
+    };
+
+    it('shows a described spelling as prose and never nests one code span in another', () => {
+      const described = {
+        ...PAGE_ENTRY,
+        retired: 'the top-level `exports` key (`all`, or a `user`/`project` map)',
+        replacement:
+          'lists of `prompt:<category>/<id>` keys under <client>, in <workspace>/resources/<type>/',
+      };
+      const row = renderUpgradingPage([described])
+        .split('\n')
+        .find((line) => line.includes('exports'));
+
+      expect(row).toContain('| the top-level `exports` key (`all`, or a `user`/`project` map) ');
+      expect(row).toContain('`prompt:<category>/<id>`');
+      expect(row).toContain('under `<client>`, in `<workspace>/resources/<type>/`');
+    });
+
+    it('shows a bare identifier of a literal kind as code', () => {
+      const bare = { ...PAGE_ENTRY, retired: 'prompts.directory' };
+
+      expect(renderUpgradingPage([bare])).toContain('| `prompts.directory` ');
+    });
+
+    it('is already formatted the way the format gate formats it', async () => {
+      const prettier = await import('prettier');
+      const pagePath = path.join(REPO_ROOT, UPGRADING_PAGE);
+      const page = renderUpgradingPage(listRetirements());
+      const options = await prettier.resolveConfig(pagePath);
+
+      expect(await prettier.format(page, { ...options, filepath: pagePath })).toBe(page);
     });
   });
 
@@ -327,28 +442,183 @@ describe('validate:retirements', () => {
     });
   });
 
-  it('passes the live tree: a site and a driver per entry, no retired name in user-facing text, the page current', () => {
+  describe('check 6: third-state wording', () => {
+    const OLD_FLAG = {
+      file: 'docs/guides/flags.md',
+      lines: [
+        { line: 1, text: 'Pass `--new-flag` to choose the folder.' },
+        { line: 2, text: 'The old flag still works.' },
+      ],
+    };
+
+    it('fails a guide line saying the old flag still works, naming the file, the line and the phrase', () => {
+      const failures = runRetirementChecks(clean({ texts: [OLD_FLAG] })).failures;
+
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toMatchObject({ check: 6, subject: 'docs/guides/flags.md:2' });
+      expect(failures[0]?.message).toContain(
+        'docs/guides/flags.md:2: "still works" (still-accepted)'
+      );
+      expect(failures[0]?.message).toContain(TWO_STATES);
+      expect(failures[0]?.message).toContain('CONTRIBUTING.md, Retiring a Spelling');
+    });
+
+    it('reads string literals and template text from TypeScript, never comments, keys, imports or literal types', () => {
+      const text = [
+        "import { x } from './deprecated-module.js';",
+        '// the --old-flag is deprecated',
+        '/* deprecated */',
+        "type Status = 'deprecated' | 'working';",
+        "const keyed = { 'deprecated': 1 };",
+        "throw new Error('--old-flag is deprecated; use --new-flag');",
+        'const shown = `first line',
+        'the old name is legacy`;',
+      ].join('\n');
+
+      expect(findTypeScriptStrings('server/src/flags.ts', text)).toEqual([
+        { line: 6, text: '--old-flag is deprecated; use --new-flag' },
+        { line: 7, text: 'first line' },
+        { line: 8, text: 'the old name is legacy' },
+      ]);
+    });
+
+    describe('over a planted repository', () => {
+      let root = '';
+      let failures: { check: number; subject: string; message: string }[] = [];
+
+      beforeAll(() => {
+        root = mkdtempSync(path.join(tmpdir(), 'retirement-wording-'));
+        const deprecated = "export const note = '--old-flag is deprecated';\n";
+        plant(root, 'server/src/flags.ts', `${deprecated}// a comment: deprecated\n`);
+        plant(
+          root,
+          'server/src/commented.ts',
+          '// --old-flag is deprecated\nexport const x = 1;\n'
+        );
+        plant(root, 'server/tests/unit/flags.test.ts', deprecated);
+        plant(root, 'server/src/flags.test.ts', deprecated);
+        plant(
+          root,
+          'hooks/lib/flags.py',
+          '"""Module docstring: deprecated."""\n# the old flag is deprecated\nNOTE = "--old-flag is deprecated"\n'
+        );
+        plant(root, 'hooks/lib/commented.py', '# deprecated\nVALUE = 1\n');
+        plant(root, 'hooks/tests/test_flags.py', 'NOTE = "--old-flag is deprecated"\n');
+        git(root, 'init', '-q');
+        git(root, 'add', '-A');
+        failures = runRetirementChecks(clean({ codeStrings: scanCodeStrings(root) })).failures;
+      });
+
+      afterAll(() => {
+        rmSync(root, { recursive: true, force: true });
+      });
+
+      it('fails a string literal in src and in a hook, each naming file, line and phrase', () => {
+        expect(failures.map((finding) => finding.subject).sort()).toEqual([
+          'hooks/lib/flags.py:3',
+          'server/src/flags.ts:1',
+        ]);
+        expect(failures.every((finding) => finding.check === 6)).toBe(true);
+        expect(failures.map((finding) => finding.message)).toEqual(
+          expect.arrayContaining([
+            expect.stringContaining('server/src/flags.ts:1: "deprecated" (deprecated)'),
+            expect.stringContaining('hooks/lib/flags.py:3: "deprecated" (deprecated)'),
+          ])
+        );
+      });
+
+      it('passes the same word in a comment, a docstring and a test file', () => {
+        const subjects = failures.map((finding) => finding.subject);
+
+        expect(subjects).not.toContain('server/src/flags.ts:2');
+        expect(subjects.some((subject) => subject.startsWith('server/src/commented.ts'))).toBe(
+          false
+        );
+        expect(subjects.some((subject) => subject.startsWith('hooks/lib/commented.py'))).toBe(
+          false
+        );
+        expect(subjects).not.toContain('hooks/lib/flags.py:1');
+        expect(subjects).not.toContain('hooks/lib/flags.py:2');
+        expect(
+          subjects.some((subject) => /tests?\//.test(subject) || subject.includes('.test.'))
+        ).toBe(false);
+      });
+    });
+
+    describe('exemptions', () => {
+      const exemption = {
+        id: 'old-flag-not-yet-retired',
+        phrase: 'still-accepted',
+        sites: [{ file: 'docs/guides/flags.md', lines: 1 }],
+        reason: 'planted',
+        asOf: '2026-11-27',
+        removeWhen: 'planted',
+      };
+
+      it('passes an exempted line', () => {
+        const wording = { phrases: PHRASES, exemptions: [exemption] };
+
+        expect(runRetirementChecks(clean({ texts: [OLD_FLAG], wording })).failures).toEqual([]);
+      });
+
+      it('fails an exemption whose line is gone, naming the exemption', () => {
+        const wording = { phrases: PHRASES, exemptions: [exemption] };
+        const gone = { ...OLD_FLAG, lines: OLD_FLAG.lines.slice(0, 1) };
+
+        const failures = runRetirementChecks(clean({ texts: [gone], wording })).failures;
+
+        expect(failures).toHaveLength(1);
+        expect(failures[0]).toMatchObject({ check: 6, subject: exemption.id });
+        expect(failures[0]?.message).toContain(
+          `exemption ${exemption.id} covers 1 line(s) of docs/guides/flags.md`
+        );
+        expect(failures[0]?.message).toContain('no line matches any more');
+      });
+
+      it('fails an exemption that covers fewer lines than the file holds', () => {
+        const wording = { phrases: PHRASES, exemptions: [exemption] };
+        const grown = {
+          ...OLD_FLAG,
+          lines: [...OLD_FLAG.lines, { line: 3, text: 'The old name still works too.' }],
+        };
+
+        expect(runRetirementChecks(clean({ texts: [grown], wording })).failures).toMatchObject([
+          { check: 6, subject: exemption.id },
+        ]);
+      });
+    });
+  });
+
+  it('passes the live tree: a site and a driver per entry, no retired name in user-facing text, the page and the projection current', () => {
     const entries = listRetirements();
     const sites = scanRefusalSites();
     const driverIds = findDriverIds(readFileSync(path.join(REPO_ROOT, DRIVER_FILE), 'utf8'));
     const texts = scanUserFacingText(REPO_ROOT);
+    const codeStrings = scanCodeStrings(REPO_ROOT);
 
     // The scans observed something: a site per entry and one driver per entry.
-    expect(new Set(sites.map((site) => site.id))).toEqual(
-      new Set(entries.map((entry) => entry.id))
+    expect(new Set(sites.map((site) => site.member))).toEqual(
+      new Set(entries.map((entry) => projectionMember(entry.id)))
     );
     expect(texts.map((text) => text.file)).toEqual(
       expect.arrayContaining(['README.md', 'docs/reference/configuration.md'])
     );
     expect([...(driverIds ?? [])].sort()).toEqual(entries.map((entry) => entry.id).sort());
+    expect(codeStrings.map((source) => source.file)).toEqual(
+      expect.arrayContaining(['server/src/index.ts', 'cli/src/index.ts', 'hooks/gate-enforce.py'])
+    );
     expect(
       runRetirementChecks({
         entries,
         sites,
         driverIds,
         texts,
+        codeStrings,
+        wording: loadWordingRules(REPO_ROOT),
         expectedPage: renderUpgradingPage(entries),
         upgradingPage: readFileSync(path.join(REPO_ROOT, UPGRADING_PAGE), 'utf8'),
+        expectedProjection: renderRetirementProjection(entries),
+        projection: readFileSync(path.join(REPO_ROOT, 'server', RETIREMENT_PROJECTION), 'utf8'),
         today: '2026-11-27',
         packageVersion: '5.1.1',
       }).failures

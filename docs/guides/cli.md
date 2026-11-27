@@ -353,7 +353,7 @@ refused before anything is written: no file changes and no row appears.
 
 ### config
 
-Manage the config file the server reads — `config.jsonc` by default, `config.json` still read if that is what you have (read, write, validate, reset). `cpm config` takes that file in the server's order — `MCP_CONFIG_PATH`, then the project's `.claude-prompts/config.jsonc` or `config.json` (the project is `CLAUDE_PROJECT_DIR`, else the directory you run `cpm` in), then the workspace's `config.jsonc` or `config.json` — see [Which File Is Read](../reference/configuration.md#which-file-is-read). A `set` or `reset` writes the file it would read, so a command run inside a project edits the project's config exactly where the server running there reads it; with no config present, `reset` creates `config.jsonc` in the project's `.claude-prompts/` when that folder exists, else in the workspace.
+Manage the config file the server reads — `config.jsonc` or `config.json` (read, write, validate, reset). `cpm config` takes that file in the server's order — `MCP_CONFIG_PATH`, then the project's `.claude-prompts/config.jsonc` or `config.json` (the project is `CLAUDE_PROJECT_DIR`, else the directory you run `cpm` in), then the workspace's `config.jsonc` or `config.json` — see [Which File Is Read](../reference/configuration.md#which-file-is-read). A `set` or `reset` writes the file it would read, so a command run inside a project edits the project's config exactly where the server running there reads it; with no config present, `reset` creates `config.jsonc` in the project's `.claude-prompts/` when that folder exists, else in the workspace.
 
 ```bash
 cpm config list --workspace server                  # Display full config
@@ -381,7 +381,7 @@ Exit codes: `0` success, `1` error or validation failure.
 
 #### config.jsonc
 
-`config.jsonc` accepts `//` and `/* */` comments and a trailing comma before `}`/`]` — nothing else beyond JSON. A plain `config.json` is still read if that is what you have; it stays strict JSON, so a comment inside one is a parse error. Within the project's `.claude-prompts/` and within a workspace, `config.jsonc` is tried first, then `config.json`.
+`config.jsonc` accepts `//` and `/* */` comments and a trailing comma before `}`/`]` — nothing else beyond JSON. The server reads a plain `config.json` the same way; it is strict JSON, so a comment inside one is a parse error. Within the project's `.claude-prompts/` and within a workspace, `config.jsonc` is tried first, then `config.json`.
 
 `cpm init` writes `config.jsonc` with `$schema` and `"version": 5` live, and every other setting commented out, showing its current value, its default and its permitted values — generated straight from the schema, so the file can never describe a setting the server does not have. An excerpt:
 
@@ -393,7 +393,7 @@ Exit codes: `0` success, `1` error or validation failure.
 //   — Which shape this config file is written in. `5` is the current format...
   "version": 5,
 
-//   — Server identity and transport settings.
+//   — Server name and port.
 //   "server": {
 //     — Server name reported to MCP clients.
 //     — default: "claude-prompts"
@@ -421,13 +421,13 @@ A write that changes no character records nothing and says so, and a workspace t
 
 A rollback writes the recorded bytes verbatim, through the same temp-file-and-rename every config write uses, and it is refused — with nothing written — when it cannot: an unknown version number, a version that recorded no bytes, bytes this build no longer accepts as configuration (an old version can predate a bound change), or a recorded `config.jsonc` in a workspace that now holds a `config.json`. Config is the one resource with no projected fallback: its version snapshot holds a filename, a size and a digest, so where the bytes are missing there is nothing to rebuild the document from, and the refusal says so rather than inventing one.
 
-**Removed in 5.0** (breaking): `cpm config set` and `cpm config reset` no longer leave a `config.json[c].backup.<timestamp>` file, and `--json` no longer carries `backupPath`. Nothing ever read those files back. Use `cpm config history` and `cpm config rollback` instead. Backup files already on disk are left exactly where they are.
+`cpm config set` and `cpm config reset` write no backup file beside the config: `cpm config history` and `cpm config rollback` are how a change is undone. Any `.backup.<timestamp>` file in the workspace is left where it is.
 
 A workspace holding both `config.jsonc` and `config.json` refuses every `config` subcommand (and server startup) rather than silently preferring one:
 
 ```
-Two config files in one directory: <path>/config.jsonc and <path>/config.json. Keep one —
-config.jsonc is the 5.0 name, config.json is still read.
+Two config files in one directory: <path>/config.jsonc and <path>/config.json. Keep one: the
+server reads either name, never both.
 ```
 
 Delete whichever file you are not using to resolve it.
@@ -460,12 +460,6 @@ cpm enable resources --json         # resources.registerWithMcp = true (JSON out
 
 Reports "already enabled/disabled" without writing when the value is unchanged. Exit codes: `0` success, `1` unknown subsystem or error.
 
-> **Changed in 3.1.2.** These nine keys were previously `*.mode` holding `"on"`/`"off"`, which no
-> reader consulted — the command reported success and changed nothing. A `config.json` still
-> carrying a `*.mode` key is adopted into the boolean on load, so no edit is required; `cpm config
-set` no longer accepts the old spelling. `telemetry.mode`, `phaseGuards.mode` and `identity.mode`
-> are unaffected — those are read, and none of them is an on/off toggle.
-
 ## Write Validation Behavior
 
 - `create`, `init`, `rename`, `move`, `toggle`, `link-gate`, and `rollback` run post-write schema validation by default.
@@ -495,7 +489,7 @@ The CLI resolves the workspace directory in this priority order:
 2. `MCP_WORKSPACE` environment variable
 3. Current working directory
 
-Within a workspace, it checks `resources/<type>/` first, then `<type>/` as a legacy fallback.
+Within a workspace, it reads `resources/<type>/`.
 
 ## Architecture
 

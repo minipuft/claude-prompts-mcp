@@ -168,7 +168,7 @@ function formatGateOutcomeStatistics(gateId: string, tally: GateOutcomeTally): s
       `  - Bypassed: ${tally.bypassed}; reminder attestations: ${tally.reminderAttestations}`,
       `  - Semantic report acceptance: ${semantic.accepted} accepted / ${semantic.rejected} rejected / ${semantic.invalid} invalid`,
       `  - Recorded tool checks: ${tools.passed} passed / ${tools.notPassed} not passed (attempted execution and exit status unavailable; not-passed may include did-not-run)`,
-      `  - Legacy unverified acceptance: ${legacy.passed} passed / ${legacy.failed} failed`,
+      `  - Verdict-only acceptance: ${legacy.passed} passed / ${legacy.failed} failed`,
       `  - Dispositions: ${dispositions.held} held / ${dispositions.advisoryCleared} advisory-cleared / ${dispositions.informationalCleared} informational-cleared`,
     ].join('\n') + '\n'
   );

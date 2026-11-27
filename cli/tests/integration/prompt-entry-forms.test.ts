@@ -229,7 +229,7 @@ describe('cpm and the two prompt forms', () => {
       mkdirSync(join(workspace, 'runtime-state'), { recursive: true });
       writeFileSync(
         join(workspace, 'config.json'),
-        JSON.stringify({ identity: { launchDefaults: { workspaceId: SCOPE } } }),
+        JSON.stringify({ version: 5, identity: { launchDefaults: { workspaceId: SCOPE } } }),
       );
       const db = new DatabaseSync(join(workspace, 'runtime-state', 'state.db'));
       db.exec(`CREATE TABLE IF NOT EXISTS version_history (

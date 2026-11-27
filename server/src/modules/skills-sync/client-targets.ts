@@ -83,8 +83,6 @@ export interface NormalizedExport {
 
 export interface SyncConfig {
   registrations?: Record<string, ScopedExports | 'all'>;
-  /** @deprecated Legacy global export list; prefer registrations. */
-  exports?: ScopedExports | 'all';
   overrides?: Record<string, { outputDir?: { user?: string; project?: string } }>;
 }
 
@@ -179,41 +177,32 @@ function isScopedExports(value: unknown): value is ScopedExports {
   return value != null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Resolve client resource selection from canonical registrations (fallback: legacy exports). */
+/**
+ * Resolve client resource selection from `registrations`. A config with no `registrations` map
+ * selects every resource for every client.
+ */
 function resolveClientResourceSelection(
   config: SyncConfig,
   clientId: string
 ): ClientResourceSelection {
-  if (config.registrations != null && typeof config.registrations === 'object') {
-    const registration = config.registrations[clientId];
-    if (registration == null) {
-      return { mode: 'unregistered', normalized: [] };
-    }
-    if (registration === 'all') {
-      return { mode: 'all', normalized: [] };
-    }
-    if (isScopedExports(registration)) {
-      return {
-        mode: 'scoped',
-        normalized: normalizeScopedSelections(registration),
-        allowList: buildScopedAllowList(registration),
-      };
-    }
-    return { mode: 'unregistered', normalized: [] };
-  }
-
-  if (config.exports === 'all') {
+  if (config.registrations == null || typeof config.registrations !== 'object') {
     return { mode: 'all', normalized: [] };
   }
-  if (isScopedExports(config.exports)) {
+  const registration = config.registrations[clientId];
+  if (registration == null) {
+    return { mode: 'unregistered', normalized: [] };
+  }
+  if (registration === 'all') {
+    return { mode: 'all', normalized: [] };
+  }
+  if (isScopedExports(registration)) {
     return {
       mode: 'scoped',
-      normalized: normalizeScopedSelections(config.exports),
-      allowList: buildScopedAllowList(config.exports),
+      normalized: normalizeScopedSelections(registration),
+      allowList: buildScopedAllowList(registration),
     };
   }
-
-  return { mode: 'all', normalized: [] };
+  return { mode: 'unregistered', normalized: [] };
 }
 
 /**

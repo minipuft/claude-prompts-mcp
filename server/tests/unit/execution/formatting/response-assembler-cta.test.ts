@@ -557,8 +557,7 @@ describe('ResponseAssembler – operator-aware CTA system', () => {
       expect(result).toContain('%judge');
     });
 
-    // The CTA emits the CANONICAL framework symbol, which is now `^`; `@` is the deprecated
-    // alias and is accepted on input only. These assertions still read `@` after the rename.
+    // The CTA emits the framework operator's sigil, `^`, from the registry.
     test('framework ^cageerf from operator decision appears in re-run', () => {
       const context = createSinglePromptContext({
         frameworkDecision: { source: 'operator', frameworkId: 'cageerf' },

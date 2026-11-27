@@ -169,14 +169,12 @@ class TestHitPathReachesTheThread:
         ctx = context_of(out)
         assert '"content"' in ctx and "missing" in ctx
 
-    def test_operators_are_visible(self, stub_cache, monkeypatch, capsys):
+    def test_at_sigil_is_not_rendered_as_a_framework(self, stub_cache, monkeypatch, capsys):
         code, out = run_hook(monkeypatch, capsys, "@CAGEERF #analytical >>demo_prompt * 3")
         ctx = context_of(out)
-        # Framework/style keep the casing the user typed; only the DB lookup
-        # that validates them is case-folded. The deprecated `@` spelling is
-        # detected and rendered as `^`.
-        assert "^CAGEERF" in ctx
-        # The verbatim command echo keeps the spelling typed, so `^CAGEERF` can only come from rendering.
+        # `^` is the framework operator; `@CAGEERF` is refused by the server, so the hook renders
+        # no framework for it while the other operators stay visible.
+        assert "^CAGEERF" not in ctx
         assert "#analytical" in ctx
         assert "*3" in ctx
 

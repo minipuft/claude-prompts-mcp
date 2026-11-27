@@ -10,7 +10,6 @@ import { readFile } from 'fs/promises';
 import os from 'node:os';
 import path from 'path';
 
-import { translateConfigFile } from './config-file-translation.js';
 import { getParsedConfigSchema, validateConfigAgainstSchema } from './config-schema-validator.js';
 import {
   assertResourceLocationSettings,
@@ -36,7 +35,6 @@ import type {
   ConfigSchemaValidationResult,
   ConfigValueWithSource,
 } from '#shared/types/config-manager.js';
-import type { ConfigFileTranslation } from './config-file-translation.js';
 
 // Imported from the defining module rather than the barrel: all four are new to this file in row
 // 6.2 and the barrel does not re-export the first three.
@@ -66,10 +64,11 @@ import {
   type ConfigManager,
   type GateSystemSettings,
 } from '#shared/types/index.js';
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 import { configFileFormat, parseConfigText } from '#shared/utils/config-file-format.js';
 import { DEFAULT_FRAMEWORK_ID } from '#shared/utils/constants.js';
 import { PathSettingError } from '#shared/utils/path-setting.js';
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
+import { unversionedConfigFileRefusal } from '#shared/utils/unversioned-config-file.js';
 // Removed: ToolDescriptionLoader import to break circular dependency
 // Now injected via dependency injection pattern
 
@@ -269,9 +268,9 @@ function parseConfigRecord(content: string, configPath: string): Record<string, 
  * `??` against a default — a key of the wrong type resolves to the value the file holds, exactly
  * as it did before, and a key the file omits resolves to the default.
  *
- * `version` included: {@link translateConfigFile} stamps `5` onto every 4.x file it translates and
- * leaves a declared version alone, so a file carrying the WRONG version still reaches here. Nothing
- * below reads the member — the schema's `const 5` is what reports it to the operator.
+ * `version` included: a file with no `version` is refused before this runs
+ * ({@link assertConfigFileIsVersioned}), but a file carrying the WRONG version still reaches here.
+ * Nothing below reads the member — the schema's `const 5` is what reports it to the operator.
  */
 function asConfigFile(parsed: Record<string, unknown>): ConfigFile {
   return parsed as unknown as ConfigFile;
@@ -280,9 +279,8 @@ function asConfigFile(parsed: Record<string, unknown>): ConfigFile {
 /**
  * Framework injection, read NESTED from the file.
  *
- * The 4.x file spelled this as seven flat `frameworks.*` keys that the loader reassembled into
- * three objects; the 5.0 file carries the objects, so this passes them through and defaults each
- * leaf. `systemPrompt.enabled` falls back to `frameworks.enabled` when the file does not say:
+ * The file carries the three injection objects nested, so this passes them through and defaults
+ * each leaf. `systemPrompt.enabled` falls back to `frameworks.enabled` when the file does not say:
  * turning the framework system off has always turned system-prompt injection off, and the nested
  * key is the narrower, newer intent.
  */
@@ -446,10 +444,8 @@ function normalizeIdentity(file: ConfigFile): IdentityConfig {
 
 /**
  * Versioning, reading the camelCase spelling the 5.0 file declares — the runtime shares it too
- * now (row 6.6), so this is pure defaulting rather than a rename. A 4.x file spelling this pair
- * snake_case is folded into the camelCase one by {@link translateConfigFile} before it reaches
- * here, so there is one spelling per concept at this point rather than two read in precedence
- * order.
+ * (row 6.6), so this is pure defaulting rather than a rename. One spelling per concept: a file
+ * carrying the snake_case pair has no `version` and is refused before it reaches here.
  */
 function normalizeVersioning(file: ConfigFile): VersioningConfig {
   const versioning = file.versioning;
@@ -510,13 +506,9 @@ function normalizeTelemetry(file: ConfigFile): TelemetryConfig {
  * function of the resolved mode rather than a constant.
  *
  * Keys the file may carry that the runtime `Config` has no member for at all — `hooks`, read by
- * the Python hooks straight off the file — are not carried across. `server.transport` is not among
- * them any more: a value other than `"stdio"` is refused before this runs (Ruling R30, transport is
- * launch-time-only), and the harmless spelling is dropped by {@link translateConfigFile}, so no
- * `transport` key survives to reach this mapping.
- *
- * `Config.analysis` is left unset on purpose. The section is no longer a config key at all: a 4.x
- * file carrying it has it dropped, with a notice naming the replacement.
+ * the Python hooks straight off the file — are not carried across. `server.transport` and
+ * `analysis` never reach this mapping: a file carrying either is refused by name before it runs
+ * ({@link refuseRetiredConfigKeys}).
  */
 function normalizeConfigFile(file: ConfigFile, configPath: string): Config {
   return {
@@ -587,13 +579,11 @@ export class TransportConfigError extends Error {
 /**
  * Refuses a raw parsed config file whose `server.transport` names anything but `"stdio"`.
  *
- * Runs against the RAW parsed record, BEFORE {@link translateConfigFile}: the translation drops
- * `server.transport` outright, so a check placed after it would see nothing and a 4.x file asking
- * for HTTP would start on stdio in silence. Refusing first is what keeps that operator request
- * answered — with the flag that satisfies it — rather than translated away.
- *
- * A `server.transport` left at `"stdio"` (or omitted) needs no report at all: the translation drops
- * it as a key 5.0 removed, and names it in the one translation notice.
+ * Runs against the RAW parsed record, FIRST, ahead of {@link assertConfigFileIsVersioned}: a
+ * pre-5.0 file asking for HTTP is answered with the flag that satisfies that request rather than
+ * with the general pre-5.0 refusal. A `server.transport` of `"stdio"` is not refused here: in a
+ * pre-5.0 file the unversioned refusal lists it, and in a 5.0 file
+ * {@link refuseRetiredConfigKeys} refuses it by name.
  */
 function assertServerTransportIsStdio(
   rawConfig: Record<string, unknown>,
@@ -605,13 +595,50 @@ function assertServerTransportIsStdio(
   const transportValue = (server as Record<string, unknown>)['transport'];
   if (transportValue === undefined || transportValue === 'stdio') return;
 
-  const notice = retirementNotice('config-server-transport');
+  const notice = retirementNotices.configServerTransport;
   throw new TransportConfigError(
     `${configPath} sets "${notice.retired}": ${JSON.stringify(transportValue)}, but transport is ` +
       `a launch-time-only setting — config can no longer select it (retired in ` +
       `${notice.refusedIn}). Remove "${notice.retired}" from the config file and launch the ` +
       `server with ${notice.replacement} instead.`
   );
+}
+
+/**
+ * Refuses a raw parsed config file that declares no `version`: it is written in the pre-5.0 shape,
+ * which no reader accepts. The refusal names each pre-5.0 key the file carries and its
+ * replacement ({@link unversionedConfigFileRefusal}, the same text `cpm` prints); the file on disk
+ * is never rewritten and never read in another shape.
+ */
+function assertConfigFileIsVersioned(rawConfig: Record<string, unknown>, configPath: string): void {
+  const refusal = unversionedConfigFileRefusal(configPath, rawConfig);
+  if (refusal !== undefined) throw new PathSettingError(`Refusing to start: ${refusal}`);
+}
+
+/**
+ * Refuses a 5.0 config file that still carries a key the ledger retired: the `analysis` section,
+ * or `server.transport` (any other value than `"stdio"` was refused already, with its flag).
+ * Neither has a reader, so loading past it would let the operator believe it took effect.
+ */
+function refuseRetiredConfigKeys(rawConfig: Record<string, unknown>, configPath: string): void {
+  if ('analysis' in rawConfig) {
+    const notice = retirementNotices.configAnalysisSection;
+    refuseConfigSetting(
+      configPath,
+      `sets "${notice.retired}", a section no longer read (retired in ${notice.refusedIn})`,
+      `the section removed; use ${notice.replacement}`
+    );
+  }
+  const server = rawConfig['server'];
+  if (isConfigObject(server) && 'transport' in server) {
+    const notice = retirementNotices.configServerTransport;
+    refuseConfigSetting(
+      configPath,
+      `sets "${notice.retired}": ${JSON.stringify(server['transport'])}, a key no longer read ` +
+        `(retired in ${notice.refusedIn}); transport is chosen at launch`,
+      `"${notice.retired}" removed; stdio is the default, and ${notice.replacement} selects HTTP`
+    );
+  }
 }
 
 /**
@@ -731,8 +758,6 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   private watching: boolean = false;
   private reloadDebounceTimer: NodeJS.Timeout | undefined;
   private frameworksConfigCache: ResolvedFrameworkConfig;
-  /** Translation notices are per-process, not per-load — file watching re-enters `loadConfig`. */
-  private warnedTranslation = false;
   /**
    * The package's own `config.schema.json`, injected by the composition root. Never read from the
    * config's `$schema`, which is an editor hint. Undefined means the file is not schema-checked.
@@ -743,15 +768,15 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   /** The schema check of the last successful parse; undefined when none ran or the load failed. */
   private schemaValidation: ConfigSchemaValidationResult | undefined;
   /**
-   * Status + errors of the last result that WARNED. Unlike `warnedTranslation` this is not
-   * once-per-process: hot reload re-enters `loadConfig`, so an unchanged file must stay quiet while
-   * a new mistake must still be reported. Cleared by a valid load, so a reintroduced error warns.
+   * Status + errors of the last result that WARNED. Not once-per-process: hot reload re-enters
+   * `loadConfig`, so an unchanged file must stay quiet while a new mistake must still be reported.
+   * Cleared by a valid load, so a reintroduced error warns.
    */
   private lastWarnedSchemaSignature: string | undefined;
   /**
-   * A snapshot of the config FILE as the rest of the process sees it — the 5.0 shape, after
-   * {@link translateConfigFile}. Without this copy nothing distinguishes "the file set this key"
-   * from "the loader defaulted it". Undefined when no file has been successfully parsed
+   * A snapshot of the config FILE as written, less a `prompts.directory` naming the default.
+   * Without this copy nothing distinguishes "the file set this key" from "the loader defaulted
+   * it". Undefined when no file has been successfully parsed
    * (constructed but never loaded, or the last `loadConfig` fell back to the defaults). Read only
    * by `getConfigValueWithSource`.
    */
@@ -793,6 +818,8 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
       // continuing would silently ignore an explicit operator request instead of naming
       // --transport as the fix.
       assertServerTransportIsStdio(parsedRecord, this.configPath);
+      assertConfigFileIsVersioned(parsedRecord, this.configPath);
+      refuseRetiredConfigKeys(parsedRecord, this.configPath);
       assertNoProjectResourceLocations(parsedRecord, this.configPath, this.projectConfigScope);
       assertResourceLocationSettings(
         parsedRecord,
@@ -800,24 +827,15 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
         this.resourcePaths?.getProfileResourcesDir()
       );
 
-      // A file that declares no `version` was written against the 4.x shape: it is translated here,
-      // in memory, and everything below reads one shape. `version: 5` (or any other declared
-      // value) passes through untouched.
-      const translation = translateConfigFile(withoutPromptsDirectory(parsedRecord));
-      this.warnConfigFileTranslated(translation);
+      // The file as written, less a `prompts.directory` the check above proved names the default.
+      const record = withoutPromptsDirectory(parsedRecord);
 
-      // Checked against the TRANSLATED file, not the raw one (ruling R33): a 4.x key the
-      // translation handled is not drift the operator has to act on, and reporting it would tell
-      // them to fix a file the server just read correctly. What the schema still reports is what
-      // the translation could NOT account for — a typo, or a key from no shape at all.
-      await this.checkAgainstSchema(translation.file);
+      // Reports, never gates: what the schema names here is a typo or a key from no shape at all.
+      await this.checkAgainstSchema(record);
 
-      // Snapshot of the translated file, which is the shape every reader below sees — so
-      // `getConfigValueWithSource` labels a user's 4.x key `'file'` under its 5.0 name rather than
-      // under a spelling nothing else in the process uses.
-      this.rawFileConfig = structuredClone(translation.file);
+      this.rawFileConfig = structuredClone(record);
 
-      const file = asConfigFile(translation.file);
+      const file = asConfigFile(record);
 
       this.config = normalizeConfigFile(file, this.configPath);
 
@@ -906,12 +924,9 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
     const mergedValue = readDotPath(this.config, key);
 
     if (rawValue !== undefined) {
-      // The snapshot is post-translation, so a 4.x spelling the operator wrote is present here
-      // under its 5.0 name and nowhere else — the legacy-spelling case this fallback used to
-      // exist for (`gates.mode` present raw, `undefined` merged) can no longer arise.
-      // What remains is the narrower one it also always covered: a key the runtime `Config` has
-      // no member for at all — `hooks.expandedOutput`, read by the Python hooks straight off the
-      // file. The file set it, so reporting `undefined` would show a live setting as unset.
+      // A key the runtime `Config` has no member for at all — `hooks.expandedOutput`, read by the
+      // Python hooks straight off the file. The file set it, so reporting `undefined` would show
+      // a live setting as unset.
       return { key, value: mergedValue !== undefined ? mergedValue : rawValue, source: 'file' };
     }
 
@@ -1370,55 +1385,6 @@ export class ConfigLoader extends EventEmitter implements ConfigManager {
   }
 
   // Removed: ToolDescriptionLoader methods - now handled via dependency injection in runtime/application.ts
-
-  /**
-   * Emit the 4.x -> 5.0 translation notice at most once per process.
-   *
-   * Fires only when the translation actually moved or dropped something — a 4.x file whose every
-   * key is already spelled the 5.0 way has nothing for the operator to act on, and a `version: 5`
-   * file is never translated at all, so both stay silent. Once per process, not once per load:
-   * file watching re-enters `loadConfig`, and a notice that repeats per reload becomes noise the
-   * operator filters out, which is how a deprecation goes unread.
-   *
-   * Names every pair and every dropped key rather than summarising: the operator's next act is to
-   * rewrite `config.json`, and a count tells them nothing about which lines to change.
-   */
-  private warnConfigFileTranslated(translation: ConfigFileTranslation): void {
-    if (this.warnedTranslation) return;
-    if (translation.translated.length === 0 && translation.dropped.length === 0) return;
-    this.warnedTranslation = true;
-
-    const parts: string[] = [
-      `[CONFIG] ${this.configPath} declares no "version", so it was read as a 4.x config file and ` +
-        'translated to the 5.0 shape in memory. The file on disk is unchanged.',
-    ];
-
-    if (translation.translated.length > 0) {
-      const pairs = translation.translated.map((pair) => `${pair.from} -> ${pair.to}`).join(', ');
-      parts.push(`Renamed: ${pairs}.`);
-    }
-
-    if (translation.dropped.length > 0) {
-      parts.push(`Dropped (5.0 has no such key): ${translation.dropped.join(', ')}.`);
-    }
-
-    if (translation.dropped.includes('analysis')) {
-      // Names the replacement rather than only the removal: a notice that says "stop doing X"
-      // without saying what to do instead reads as breakage.
-      const notice = retirementNotice('config-analysis-section');
-      parts.push(
-        `The \`${notice.retired}\` section was removed in ${notice.refusedIn}; use ` +
-          `${notice.replacement}.`
-      );
-    }
-
-    parts.push(
-      `Rewrite ${path.basename(this.configPath)} in the 5.0 spellings with "version": 5 and it ` +
-        'is read as written, silencing this notice. This translation is removed in 6.0.0.'
-    );
-
-    logger.warn(parts.join(' '));
-  }
 
   /**
    * Validates the raw parsed file against the injected schema and records the result. Reports,

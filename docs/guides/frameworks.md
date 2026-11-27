@@ -45,7 +45,7 @@ frameworks at the same time — CAGEERF for a server codebase, SCAMPER for a des
 A framework that only one project needs belongs in that project's `.claude-prompts/` folder, where it
 loads for that project alone (see [Custom Resources](custom-resources.md#a-projects-own-resources)).
 
-Declare the starting point in that project's `config.jsonc` (`config.json` is also still read):
+Declare the starting point in that project's config file (`config.jsonc` or `config.json`):
 
 ```json
 {
@@ -99,9 +99,6 @@ prompt_engine(command: "^REACT >>my_prompt")
 `resource_manager` applies through `^<id>` straight away, without a restart, and once it is deleted
 `^<id>` is left as literal text. A word that names no framework is also left as literal text, which
 is what keeps a caret in ordinary command text, such as `^2`, from being read as an operator.
-
-`@<id>` is the deprecated spelling of the same operator. It still works and the reply says to use
-`^`. Claude Code, Codex and Cursor read `@` as a file or mention sigil, which is why `^` replaced it.
 
 The override needs no system toggle: with the framework system disabled
 (`system_control(action:"framework", operation:"disable")`), `^REACT` still applies to every step

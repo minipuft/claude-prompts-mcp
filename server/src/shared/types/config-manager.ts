@@ -98,9 +98,8 @@ export interface ConfigManager {
 
   // ── Domain config getters ────────────────────────────────────────────
 
-  // No `getAnalysisConfig` / `getSemanticAnalysisConfig`: the `analysis.semanticAnalysis` section
-  // was removed in 5.0. A 4.x file carrying it is dropped on load with a translation notice —
-  // `Config` no longer declares the field at all.
+  // No `getAnalysisConfig` / `getSemanticAnalysisConfig`: `Config` declares no `analysis` field,
+  // and a config file carrying the section is refused at load, naming its replacement.
   getLoggingConfig(): LoggingConfig;
   getFrameworksConfig(): ResolvedFrameworkConfig;
   getGatesConfig(): GateSystemSettings;

@@ -32,18 +32,18 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 // Comments and trailing commas are both fine here — that is what the .jsonc extension buys.
 // Uncomment a single line and the file still parses; there are no commas to fix afterwards.
 //
-// A plain config.json is still read if you prefer one. It simply cannot carry comments.
+// The server reads a plain config.json the same way. It cannot carry comments.
 
 {
 //   — JSON Schema reference for IDE validation.
   "$schema": "https://cdn.jsdelivr.net/npm/claude-prompts@6/config.schema.json",
 
 //   — Which shape this config file is written in. \`5\` is the current format, described by every
-//     setting below. A file with no \`version\` at all is read as an older (4.x) file: the server
-//     translates it into the 5.0 shape when it loads, without changing anything on disk.
+//     setting below. A file with no \`version\` is refused at startup, with a message naming each
+//     key to change.
   "version": 5,
 
-//   — Server identity and transport settings.
+//   — Server name and port.
 //   "server": {
 //     — Server name reported to MCP clients.
 //     — default: "claude-prompts"

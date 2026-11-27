@@ -406,24 +406,19 @@ export function compareVersions(
  * config DOCUMENT through the same reader `cpm config` uses, so the value is the one on disk and
  * the resolution is not a second derivation of where the config lives.
  *
- * Both spellings are honoured — `versioning.maxVersions` is the 5.0 file name and
- * `versioning.max_versions` the 4.x one the server still folds in
- * (`infra/config/config-file-translation.ts`). A value that is not a positive integer falls back
- * rather than throwing: a malformed setting must not make a rollback fail, and the server's own
- * loader treats it the same way.
+ * A value that is not a positive integer falls back rather than throwing: a malformed setting must
+ * not make a rollback fail, and the server's own loader treats it the same way. A config file the
+ * reader refuses (no `version`, two files in one directory) falls back the same way.
  */
 export function resolveConfiguredMaxVersions(workspace: string): number {
   const read = readConfig(workspace);
   if (!read.success || read.config === undefined) {
     return DEFAULT_MAX_VERSIONS;
   }
-  for (const key of ['versioning.maxVersions', 'versioning.max_versions']) {
-    const value = getConfigValue(read.config, key);
-    if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
-      return value;
-    }
-  }
-  return DEFAULT_MAX_VERSIONS;
+  const value = getConfigValue(read.config, 'versioning.maxVersions');
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : DEFAULT_MAX_VERSIONS;
 }
 
 /**

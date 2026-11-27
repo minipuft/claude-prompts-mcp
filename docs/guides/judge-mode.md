@@ -57,8 +57,8 @@ against independent expected outcomes before making quality or cost claims.
    whole `user_response.trim()` bytes. A replacement or subset is a different
    target. To replace the output, submit FAIL against the old target, receive the
    renewed server attempt, capture the new output in a separate call, then submit
-   a fresh bound report. These capture rules apply to semantic reports; ordinary
-   legacy review behavior remains unchanged.
+   a fresh bound report. These capture rules apply to semantic reports only; a
+   review whose gates carry no semantic criteria takes its verdict without a capture.
 
    Missing or mismatched definitions and bindings leave semantic acceptance
    unavailable. Do not invent pins or substitute a bare PASS. Use the

@@ -3,16 +3,17 @@
  * Retirement ledger gate.
  *
  * `tooling/contracts/registries/retirements.json` holds one entry per spelling the product once
- * accepted and now refuses. An entry refuses nothing by existing: a refusal site calls
- * `retirementNotice('<id>')` and composes the entry's text into its own message. This gate is
- * what joins the two, so "where is this refusal held" is answered by a command, never by a
- * hand-kept list.
+ * accepted and now refuses. An entry refuses nothing by existing: a refusal site imports the
+ * generated projection (`src/shared/utils/_generated/retirement-notices.ts`) as a namespace,
+ * reads the entry's member by name (`retirementNotices.configFileUnversioned` for
+ * `config-file-unversioned`) and composes its text into its own message. This gate is what joins
+ * the two, so "where is this refusal held" is answered by a command, never by a hand-kept list.
  *
  * Checks, numbered as in the retirement-ledger plan:
- *   1. every entry has at least one refusal site, and every `retirementNotice` call passes a
- *      literal id naming an existing entry. Read from the TypeScript syntax tree of every `.ts`
- *      file under `server/src` and `cli/src`, so a commented-out call or an id quoted in prose is
- *      not a site.
+ *   1. every entry has at least one refusal site, and every use of the projection reads one
+ *      member, by name, that names an existing entry. Read from the TypeScript syntax tree of
+ *      every `.ts` file under `server/src` and `cli/src`, so a commented-out read or a name quoted
+ *      in prose is not a site, and a named import, a re-export or a computed member is a finding.
  *   2. every entry has a driver in the one table-driven refusal test (`DRIVERS` in
  *      `tests/unit/retirements/retirement-refusals.test.ts`), which feeds the old spelling to the
  *      real boundary; a driver for an id the ledger does not hold fails too.
@@ -22,9 +23,12 @@
  *      entry whose `docPattern` is null is skipped.
  *   4. expiry (`scripts/lib/retirement-expiry.js`): an entry past its `forgetAfter` warns; it
  *      fails once the package's major is greater than the major of its `refusedIn`.
- *   5. `docs/reference/upgrading.md` on disk is exactly what `generate-retirements-doc.ts`
- *      renders from the ledger, so a hand edit or a stale page fails naming the command to run.
- * Check 6 (third-state wording) is not here.
+ *   5. `docs/reference/upgrading.md` and the runtime projection on disk are exactly what
+ *      `generate-retirements-doc.ts` renders from the ledger, so a hand edit, a stale file or an
+ *      entry present in one and absent from the other fails naming the command to run.
+ *   6. no user-facing line and no string the product shows describes a form as old but still
+ *      accepted ("still works", "legacy", "deprecated"): `scripts/lib/third-state-wording.ts`,
+ *      with its phrases and exemptions in `scripts/retirement-wording.json`.
  *
  * `--list` prints the log instead: each entry with its dates and its sites as `file:line`.
  *
@@ -43,12 +47,24 @@ import {
   UPGRADING_PAGE,
 } from './generate-retirements-doc.js';
 import { expiryOutcomes, isoToday } from './lib/retirement-expiry.js';
+import { listRetirements, type RetirementEntry } from './lib/retirement-ledger.js';
+import {
+  projectionMember,
+  renderRetirementProjection,
+  RETIREMENT_PROJECTION,
+} from './lib/retirement-projection.js';
+import {
+  checkWording,
+  findWordingHits,
+  loadWordingRules,
+  scanCodeStrings,
+  type WordingRules,
+} from './lib/third-state-wording.js';
 import {
   listUserFacingFiles,
   readUserFacingLines,
   type UserFacingLine,
 } from './lib/user-facing-scope.js';
-import { listRetirements, type RetirementEntry } from '../src/shared/utils/retirement-notice.js';
 
 const SERVER_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REPO_ROOT = path.resolve(SERVER_ROOT, '..');
@@ -61,19 +77,24 @@ export const SITE_ROOTS = ['server/src', 'cli/src'] as const;
 export const DRIVER_FILE = 'server/tests/unit/retirements/retirement-refusals.test.ts';
 export const DRIVER_TABLE = 'DRIVERS';
 
-const SITE_FUNCTION = 'retirementNotice';
+/** An import specifier that names the projection, from any directory. */
+const PROJECTION_SPECIFIER = /(?:^|\/)_generated\/retirement-notices\.js$/;
+const PROJECTION_FILE = `server/${RETIREMENT_PROJECTION}`;
 const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist']);
 
-/** One `retirementNotice(...)` call. `id` is null when the argument is not a string literal. */
+/**
+ * One read of the projection. `member` is the exported name read, or null when the use names no
+ * member statically (a computed member, a named import, a re-export, the namespace passed whole).
+ */
 export interface RetirementSite {
-  readonly id: string | null;
+  readonly member: string | null;
   readonly file: string;
   readonly line: number;
 }
 
 /** A failed check, naming the entry (or the site) it is about. */
 export interface RetirementFinding {
-  readonly check: 1 | 2 | 3 | 4 | 5;
+  readonly check: 1 | 2 | 3 | 4 | 5 | 6;
   readonly subject: string;
   readonly message: string;
 }
@@ -92,11 +113,18 @@ export interface RetirementCheckInput {
   readonly sites: readonly RetirementSite[];
   /** Ids the driver table covers, or null when the table could not be found. */
   readonly driverIds: readonly string[] | null;
-  /** Every user-facing file, for check 3. */
+  /** Every user-facing file, for checks 3 and 6. */
   readonly texts: readonly ScannedText[];
+  /** The displayable strings of the code scope, for check 6. */
+  readonly codeStrings: readonly ScannedText[];
+  /** Check 6's phrases and exemptions. */
+  readonly wording: WordingRules;
   /** What the generator renders from the ledger, and the page as it is on disk (null: absent). */
   readonly expectedPage: string;
   readonly upgradingPage: string | null;
+  /** What the generator renders as the runtime projection, and the file on disk (null: absent). */
+  readonly expectedProjection: string;
+  readonly projection: string | null;
   readonly today: string;
   readonly packageVersion: string;
 }
@@ -106,30 +134,82 @@ export interface RetirementCheckResult {
   readonly warnings: RetirementFinding[];
 }
 
-function isSiteCall(node: ts.CallExpression): boolean {
-  const callee = node.expression;
-  if (ts.isIdentifier(callee)) return callee.text === SITE_FUNCTION;
-  return ts.isPropertyAccessExpression(callee) && callee.name.text === SITE_FUNCTION;
-}
-
-function literalText(node: ts.Expression | undefined): string | null {
-  if (node === undefined) return null;
+function literalText(node: ts.Expression): string | null {
   return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node) ? node.text : null;
 }
 
-/** Every `retirementNotice(...)` call in one file's syntax tree; comments and strings are not calls. */
+function namesProjection(specifier: ts.Expression | undefined): boolean {
+  return (
+    specifier !== undefined &&
+    ts.isStringLiteral(specifier) &&
+    PROJECTION_SPECIFIER.test(specifier.text)
+  );
+}
+
+/**
+ * The local names a file binds the projection namespace to, and every import or re-export of the
+ * projection in another form: a named or default import, or a re-export, hides which entry a
+ * later read takes, so each is reported as a site that names no entry.
+ */
+function projectionBindings(source: ts.SourceFile): {
+  namespaces: Set<string>;
+  others: ts.Node[];
+} {
+  const namespaces = new Set<string>();
+  const others: ts.Node[] = [];
+  for (const statement of source.statements) {
+    if (ts.isExportDeclaration(statement) && namesProjection(statement.moduleSpecifier)) {
+      others.push(statement);
+    }
+    if (!ts.isImportDeclaration(statement) || !namesProjection(statement.moduleSpecifier)) continue;
+    const bindings = statement.importClause?.namedBindings;
+    if (bindings !== undefined && ts.isNamespaceImport(bindings) && !statement.importClause?.name) {
+      namespaces.add(bindings.name.text);
+    } else {
+      others.push(statement);
+    }
+  }
+  return { namespaces, others };
+}
+
+/** The member a namespace read names, or undefined when `node` is not a read of a bound name. */
+function memberRead(node: ts.Node, namespaces: Set<string>): string | null | undefined {
+  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
+    const target = node.expression;
+    if (!ts.isIdentifier(target) || !namespaces.has(target.text)) return undefined;
+    return ts.isPropertyAccessExpression(node)
+      ? node.name.text
+      : literalText(node.argumentExpression);
+  }
+  return ts.isIdentifier(node) && namespaces.has(node.text) ? null : undefined;
+}
+
+/**
+ * Every read of the projection in one file's syntax tree; comments and strings are not reads. A
+ * read is `<namespace>.<member>` (or `<namespace>['<member>']`) on a namespace import of the
+ * projection; any other use of that namespace, and any other import form, names no entry.
+ */
 export function findRetirementSites(file: string, text: string): RetirementSite[] {
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const sites: RetirementSite[] = [];
+  const { namespaces, others } = projectionBindings(source);
+  const siteAt = (node: ts.Node, member: string | null): RetirementSite => ({
+    member,
+    file,
+    line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+  });
+  const sites = others.map((node) => siteAt(node, null));
   const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node) && isSiteCall(node)) {
-      const { line } = source.getLineAndCharacterOfPosition(node.getStart(source));
-      sites.push({ id: literalText(node.arguments[0]), file, line: line + 1 });
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return;
+    const member = memberRead(node, namespaces);
+    if (member !== undefined) {
+      sites.push(siteAt(node, member));
+      if (ts.isElementAccessExpression(node)) visit(node.argumentExpression);
+      return;
     }
     ts.forEachChild(node, visit);
   };
   visit(source);
-  return sites;
+  return sites.sort((a, b) => a.line - b.line);
 }
 
 function unwrapExpression(node: ts.Expression): ts.Expression {
@@ -175,33 +255,33 @@ export function findDriverIds(text: string, file = DRIVER_FILE): string[] | null
   return ids;
 }
 
-/** Check 1: every entry has a site; every site passes a literal id the ledger holds. */
+/** Check 1: every entry has a site; every site reads a member that names a ledger entry. */
 export function checkSites(
   entries: RetirementCheckInput['entries'],
   sites: readonly RetirementSite[]
 ): RetirementFinding[] {
-  const known = new Set(entries.map((entry) => entry.id));
-  const sited = new Set(sites.map((site) => site.id));
+  const known = new Set(entries.map((entry) => projectionMember(entry.id)));
+  const read = new Set(sites.map((site) => site.member));
   const findings: RetirementFinding[] = entries
-    .filter((entry) => !sited.has(entry.id))
+    .filter((entry) => !read.has(projectionMember(entry.id)))
     .map((entry) => ({
       check: 1,
       subject: entry.id,
-      message: `${entry.id}: no refusal site calls ${SITE_FUNCTION}('${entry.id}') under ${SITE_ROOTS.join(' or ')}. Refuse the spelling at its boundary through the entry, or delete the entry.`,
+      message: `${entry.id}: no refusal site reads ${projectionMember(entry.id)} from the retirement projection under ${SITE_ROOTS.join(' or ')}. Refuse the spelling at its boundary through the entry, or delete the entry.`,
     }));
   for (const site of sites) {
     const at = `${site.file}:${site.line}`;
-    if (site.id === null) {
+    if (site.member === null) {
       findings.push({
         check: 1,
         subject: at,
-        message: `${at}: ${SITE_FUNCTION}() is called without a string-literal id, which no entry can be joined to.`,
+        message: `${at}: the retirement projection is used without naming one member, which no entry can be joined to. Import it as a namespace and read the entry by name.`,
       });
-    } else if (!known.has(site.id)) {
+    } else if (!known.has(site.member)) {
       findings.push({
         check: 1,
-        subject: site.id,
-        message: `${at}: ${SITE_FUNCTION}('${site.id}') names no entry in retirements.json.`,
+        subject: site.member,
+        message: `${at}: ${site.member} names no entry in retirements.json.`,
       });
     }
   }
@@ -262,20 +342,50 @@ export function checkDocPatterns(
   );
 }
 
-/** Check 5: the upgrade page on disk is what the generator renders from the ledger. */
-export function checkUpgradingPage(expected: string, onDisk: string | null): RetirementFinding[] {
+/** Check 5 for one generated file: on disk it is what the generator renders from the ledger. */
+function checkGeneratedFile(
+  file: string,
+  expected: string,
+  onDisk: string | null
+): RetirementFinding[] {
   if (onDisk === expected) return [];
   const state = onDisk === null ? 'does not exist' : 'is not what the ledger renders';
   return [
     {
       check: 5,
-      subject: UPGRADING_PAGE,
-      message: `${UPGRADING_PAGE} ${state}. It is generated: run \`${GENERATE_COMMAND}\` and commit the result; edit retirements.json, never the page.`,
+      subject: file,
+      message: `${file} ${state}. It is generated: run \`${GENERATE_COMMAND}\` and commit the result; edit retirements.json, never the generated file.`,
     },
   ];
 }
 
-/** Checks 1 to 5 over planted or scanned input; pure. */
+/** Check 5: the upgrade page on disk is what the generator renders from the ledger. */
+export function checkUpgradingPage(expected: string, onDisk: string | null): RetirementFinding[] {
+  return checkGeneratedFile(UPGRADING_PAGE, expected, onDisk);
+}
+
+/**
+ * Check 5: the runtime projection on disk is what the generator renders, so an entry the ledger
+ * holds and the projection lacks, or the reverse, or a hand-edited text, fails.
+ */
+export function checkRuntimeProjection(
+  expected: string,
+  onDisk: string | null
+): RetirementFinding[] {
+  return checkGeneratedFile(PROJECTION_FILE, expected, onDisk);
+}
+
+/** Check 6: third-state wording in user-facing text and in code strings, minus exemptions. */
+export function checkThirdStateWording(
+  texts: readonly ScannedText[],
+  codeStrings: readonly ScannedText[],
+  wording: WordingRules
+): RetirementFinding[] {
+  const hits = findWordingHits([...texts, ...codeStrings], wording.phrases);
+  return checkWording(hits, wording.exemptions).map((finding) => ({ check: 6, ...finding }));
+}
+
+/** Checks 1 to 6 over planted or scanned input; pure. */
 export function runRetirementChecks(input: RetirementCheckInput): RetirementCheckResult {
   const expiry = expiryOutcomes(input.entries, {
     today: input.today,
@@ -292,7 +402,9 @@ export function runRetirementChecks(input: RetirementCheckInput): RetirementChec
       ...checkDrivers(input.entries, input.driverIds),
       ...checkDocPatterns(input.entries, input.texts),
       ...checkUpgradingPage(input.expectedPage, input.upgradingPage),
+      ...checkRuntimeProjection(input.expectedProjection, input.projection),
       ...expiry.failures.map(asFinding),
+      ...checkThirdStateWording(input.texts, input.codeStrings, input.wording),
     ],
     warnings: expiry.warnings.map(asFinding),
   };
@@ -318,8 +430,8 @@ export function scanRefusalSites(repoRoot = REPO_ROOT): RetirementSite[] {
   );
 }
 
-function readUpgradingPage(): string | null {
-  const file = path.join(REPO_ROOT, UPGRADING_PAGE);
+function readRepoFile(relative: string): string | null {
+  const file = path.join(REPO_ROOT, relative);
   return existsSync(file) ? readFileSync(file, 'utf8') : null;
 }
 
@@ -340,8 +452,9 @@ function readPackageVersion(): string {
 
 function printList(entries: readonly RetirementEntry[], sites: readonly RetirementSite[]): void {
   for (const entry of entries) {
+    const member = projectionMember(entry.id);
     const at = sites
-      .filter((site) => site.id === entry.id)
+      .filter((site) => site.member === member)
       .map((site) => `${site.file}:${site.line}`);
     console.log(`${entry.id} (${entry.kind})`);
     console.log(`  retired:     ${entry.retired}`);
@@ -363,7 +476,7 @@ function main(): void {
   // A scan that found no call at all observed nothing; reporting it as clean would be a silence.
   if (entries.length > 0 && sites.length === 0) {
     console.error(
-      `❌ ${GATE}: found no ${SITE_FUNCTION}() call under ${SITE_ROOTS.join(', ')}; the scan is broken.`
+      `❌ ${GATE}: found no read of the retirement projection under ${SITE_ROOTS.join(', ')}; the scan is broken.`
     );
     process.exitCode = 1;
     return;
@@ -376,12 +489,22 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
+  const codeStrings = scanCodeStrings(REPO_ROOT);
+  if (!codeStrings.some((source) => source.lines.length > 0)) {
+    console.error(`❌ ${GATE}: the code scope held no string literal; the scan is broken.`);
+    process.exitCode = 1;
+    return;
+  }
   const { failures, warnings } = runRetirementChecks({
     entries,
     sites,
     texts,
+    codeStrings,
+    wording: loadWordingRules(REPO_ROOT),
     expectedPage: renderUpgradingPage(entries),
-    upgradingPage: readUpgradingPage(),
+    upgradingPage: readRepoFile(UPGRADING_PAGE),
+    expectedProjection: renderRetirementProjection(entries),
+    projection: readRepoFile(PROJECTION_FILE),
     driverIds: findDriverIds(readFileSync(path.join(REPO_ROOT, DRIVER_FILE), 'utf8')),
     today: isoToday(),
     packageVersion: readPackageVersion(),
@@ -393,7 +516,7 @@ function main(): void {
     return;
   }
   console.log(
-    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page current, ${warnings.length} past its date`
+    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page and the runtime projection current, ${warnings.length} past its date; ${codeStrings.length} code file(s) and the user-facing text free of third-state wording outside its exemptions`
   );
 }
 

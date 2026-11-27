@@ -768,13 +768,6 @@ describe('skills-sync usage validation and config resolution against a real temp
       }
     );
 
-    it('does not fall back to a legacy exports key once registrations exists', async () => {
-      expect(await previewedFor('registrations:\n  cursor: all\nexports: all\n')).toEqual({
-        skills: [],
-        skipped: true,
-      });
-    });
-
     it('selects only the listed keys for a scoped registration, and nothing in the other scope', async () => {
       const config = 'registrations:\n  claude-code:\n    user:\n      - prompt:examples/alpha\n';
 
@@ -782,29 +775,34 @@ describe('skills-sync usage validation and config resolution against a real temp
       expect((await previewedFor(config, { scope: 'project' })).skills).toEqual([]);
     });
 
-    it('reads the legacy `exports: all` shape as everything', async () => {
-      expect(await previewedFor('exports: all\n')).toEqual({
+    it('selects every resource for a config with no registrations map', async () => {
+      expect(await previewedFor('unrelated: 1\n')).toEqual({
         skills: ['alpha', 'beta'],
         skipped: false,
       });
     });
 
-    it('reads the legacy `exports: {user, project}` shape as a scoped selection', async () => {
-      const config =
-        'exports:\n  user:\n    - prompt:examples/alpha\n  project:\n    - prompt:examples/beta\n';
-
-      expect((await previewedFor(config)).skills).toEqual(['alpha']);
-      expect((await previewedFor(config, { scope: 'project' })).skills).toEqual(['beta']);
-    });
-
     it.each([
-      ['an `exports` list', 'exports:\n  - prompt:examples/alpha\n'],
-      ['an `exports` string that is not "all"', "exports: 'al'\n"],
-      ['no registrations and no exports', 'unrelated: 1\n'],
-    ])('selects every resource for %s, not the listed ones', async (_name, config) => {
-      // A typo'd legacy shape exports MORE, where a typo'd registration exports nothing.
-      expect(await previewedFor(config)).toEqual({ skills: ['alpha', 'beta'], skipped: false });
-    });
+      ['`all`', 'exports: all\n'],
+      ['a user/project map', 'exports:\n  user:\n    - prompt:examples/alpha\n'],
+      ['a list', 'exports:\n  - prompt:examples/alpha\n'],
+      ['a string that is not "all"', "exports: 'al'\n"],
+      ['registrations beside it', 'registrations:\n  cursor: all\nexports: all\n'],
+    ])(
+      'refuses a config carrying the retired `exports` key as %s, exporting nothing',
+      async (_name, config) => {
+        await writeConfig(`${config}${outputOverride()}`);
+
+        const refusal = await previewExport().then(
+          () => undefined,
+          (error: Error) => error.message
+        );
+
+        expect(refusal).toContain('refused since 6.0.0');
+        expect(refusal).toContain('a `registrations` map in skills-sync.yaml, keyed by client id');
+        expect(refusal).toContain(configPath());
+      }
+    );
 
     it('ignores the selection when --id names a resource, even for an unregistered client', async () => {
       const result = await previewedFor("registrations:\n  claude-code: 'al'\n", { id: 'alpha' });

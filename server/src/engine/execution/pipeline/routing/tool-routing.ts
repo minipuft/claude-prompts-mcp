@@ -53,7 +53,8 @@ const FRAMEWORK_PATTERN = /^(>>|\/)?framework\s+(switch|change)\s+(.+)$/i;
 const ANALYTICS_PATTERN = /^(>>|\/)?analytics?$/i;
 const GUIDE_PATTERN = /^(>>|\/)?guide(?:\s+(.*))?$/i;
 const GATES_PATTERN = /^(>>|\/)?gates?(?:\s+(.*))?$/i;
-// '^' is the canonical framework sigil; '@' is the deprecated spelling (removed next major).
+// '^' is the framework operator. '@' passes through so the parser can refuse a retired
+// `@<framework>` spelling with its replacement instead of a missing-prompt-id reply.
 const ALLOWED_PREFIX_TOKENS = ['^', '@', '%judge', '%clean', '%lean'];
 
 function isPlausiblePromptId(token: string): boolean {

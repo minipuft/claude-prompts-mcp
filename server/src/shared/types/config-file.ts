@@ -56,7 +56,7 @@ type ConfigFileLogLevel = 'error' | 'warn' | 'info' | 'debug';
  */
 type ConfigFileReminderSubject = string;
 
-/** Server identity and transport settings. */
+/** Server name and port. */
 interface ConfigFileServer {
   /**
    * Server name reported to MCP clients.
@@ -639,19 +639,19 @@ interface ConfigFileChainSessions {
 /**
  * The contents of a 5.0 `config.json`.
  *
- * Every section is optional; `version` is not, because the loader routes on it and a file that
- * does not say which shape it is written in cannot be read as either.
+ * Every section is optional; `version` is not: a file that does not say which shape it is written
+ * in is refused.
  */
 export interface ConfigFile {
   /** JSON Schema reference for IDE validation. */
   $schema?: string;
   /**
    * Which shape this config file is written in. `5` is the current format, described by every
-   * setting below. A file with no `version` at all is read as an older (4.x) file: the server
-   * translates it into the 5.0 shape when it loads, without changing anything on disk.
+   * setting below. A file with no `version` is refused at startup, with a message naming each
+   * key to change.
    */
   version: 5;
-  /** Server identity and transport settings. */
+  /** Server name and port. */
   server?: ConfigFileServer;
   /** Where resources are read from. */
   paths?: ConfigFilePaths;

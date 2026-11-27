@@ -35,7 +35,7 @@ export function seedVersionHistory(
   const dbPath = join(runtimeDir, 'state.db');
   writeFileSync(
     join(workspace, 'config.json'),
-    JSON.stringify({ identity: { launchDefaults: { workspaceId: FIXTURE_SCOPE } } }),
+    JSON.stringify({ version: 5, identity: { launchDefaults: { workspaceId: FIXTURE_SCOPE } } }),
   );
 
   const script = `

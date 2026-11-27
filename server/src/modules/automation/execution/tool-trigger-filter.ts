@@ -5,10 +5,6 @@
  * Partitions tool detection matches into those ready to run now and those needing
  * user confirmation, deciding from each tool's `trigger` and `confirm` settings.
  *
- * Named for what it does rather than for the retired `mode` field: `mode: auto|manual|confirm`
- * was replaced by `trigger` + `confirm`, so "execution mode" no longer describes anything the
- * schema has. `ExecutionModeSchema` keeps its name because it still parses the deprecated field.
- *
  * Extracted from the pipeline stage to keep orchestration thin.
  *
  * Re-run to Approve:
@@ -79,11 +75,9 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
    *
    * Categorizes matches into:
    * - readyForExecution: Tools that can execute immediately
-   * - skippedManual: (legacy) Always empty - manual mode is now trigger: explicit
    * - pendingConfirmation: Tools with confirm: true awaiting user approval
    *
-   * Note: The old mode-based filtering (auto/manual/confirm) has been replaced
-   * with a simpler boolean check: requiresConfirmation from the match.
+   * The decision is the match's `requiresConfirmation` and `explicitRequest` flags.
    *
    * @param matches - Detection matches from ToolDetectionService
    * @param tools - Available tools for lookup
@@ -128,7 +122,6 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
     promptId: string
   ): ToolTriggerFilterResult {
     const readyForExecution: ToolDetectionMatch[] = [];
-    const skippedManual: string[] = []; // Legacy field, always empty now
     const pendingConfirmation: ToolPendingConfirmation[] = [];
 
     const toolMap = new Map(tools.map((t) => [t.id, t]));
@@ -183,7 +176,6 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
 
     const result: ToolTriggerFilterResult = {
       readyForExecution,
-      skippedManual,
       pendingConfirmation,
       requiresConfirmation: pendingConfirmation.length > 0,
     };
@@ -249,8 +241,7 @@ export class ToolTriggerFilter implements ToolTriggerFilterPort {
   }
 
   /**
-   * @deprecated Manual mode is deprecated. Use trigger: explicit instead.
-   * This method is preserved for backwards compatibility during migration.
+   * Log that an explicit `tool:<id>` argument bypassed a tool's confirmation.
    *
    * @param toolId - Tool ID that was force-executed
    */

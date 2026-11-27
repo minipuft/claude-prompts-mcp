@@ -52,7 +52,7 @@ async function loaderWith(resourcePaths?: ResourcePathSource) {
   const configPath = path.join(dir, 'config.json');
   await writeFile(
     configPath,
-    JSON.stringify({ prompts: { directory: 'resources/prompts' } }),
+    JSON.stringify({ version: 5, prompts: { directory: 'resources/prompts' } }),
     'utf8'
   );
   const manager = new ConfigLoader(configPath, resourcePaths);
@@ -272,7 +272,7 @@ describe('project workspace write destination', () => {
     const configPath = path.join(root, 'config.json');
     await writeFile(
       configPath,
-      JSON.stringify({ prompts: { directory: 'resources/prompts' } }),
+      JSON.stringify({ version: 5, prompts: { directory: 'resources/prompts' } }),
       'utf8'
     );
     const manager = new ConfigLoader(configPath, resolver);

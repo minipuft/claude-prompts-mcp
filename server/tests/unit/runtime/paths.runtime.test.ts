@@ -577,20 +577,19 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     expect(existsSync(path.join(workspace, 'resources', 'prompts'))).toBe(false);
   });
 
-  it('keeps writing into a legacy <workspace>/<type> directory, so an existing collection does not split', () => {
+  it('ignores a <workspace>/<type> folder that holds no resource: every type stays under resources/', () => {
     mkdirSync(path.join(workspace, 'prompts'));
     mkdirSync(path.join(workspace, 'frameworks'));
+    mkdirSync(path.join(workspace, 'scripts'));
+    writeFileSync(path.join(workspace, 'scripts', 'build.sh'), 'echo hi\n');
     mkdirSync(path.join(workspace, 'resources', 'frameworks'), { recursive: true });
     pathLocations.set({ workspace });
     const resolver = new PathResolver({ cli: {}, packageRoot });
 
-    expect(resolver.getPromptsPath()).toBe(path.join(workspace, 'prompts'));
-    expect(resolver.getGatesPath()).toBe(path.join(workspace, 'resources', 'gates'));
-    // With both layouts present, `resources/<type>` is the root and the legacy one is an overlay beneath it.
-    expect(resolver.getFrameworksPath()).toBe(path.join(workspace, 'resources', 'frameworks'));
+    expect(() => resolver.assertUsablePathSettings()).not.toThrow();
+    expect(directoriesOf(resolver)).toEqual(expectedUnder(path.join(workspace, 'resources')));
     expect(resolver.getOverlayResourceDirs('frameworks', resolver.getFrameworksPath())).toEqual([
       path.join(packageRoot, 'resources', 'frameworks'),
-      path.join(workspace, 'frameworks'),
     ]);
   });
 
@@ -605,6 +604,123 @@ describe('PathResolver resolves resource directories inside a custom workspace',
     expect(directoriesOf(new PathResolver({ cli: {}, packageRoot }))).toEqual(
       expectedUnder(path.join(packageRoot, 'resources'))
     );
+  });
+});
+
+/**
+ * A workspace root that still holds resources in `<workspace>/<type>/` is refused at startup: the
+ * server serves `<workspace>/resources/<type>/` only. What counts as "holds resources" is each
+ * loader's own definition, so a folder of that name with other content is not a resource folder.
+ */
+describe('PathResolver.assertUsablePathSettings refuses a workspace root that holds resources', () => {
+  /** One definition file per type, at the path that type's loader reads. */
+  const DEFINITIONS = {
+    prompts: path.join('demo', 'hello', 'prompt.yaml'),
+    gates: path.join('probe', 'gate.yaml'),
+    frameworks: path.join('probe', 'framework.yaml'),
+    styles: path.join('probe', 'style.yaml'),
+    scripts: path.join('probe', 'tool.yaml'),
+  } as const;
+  type RootType = keyof typeof DEFINITIONS;
+  let dir: string;
+  let workspace: string;
+  const packageRoot = '/claude-prompts/package';
+
+  function writeUnder(...segments: string[]): void {
+    const file = path.join(workspace, ...segments);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, 'id: probe\n');
+  }
+
+  function refusalFor(resolver: PathResolver): string {
+    try {
+      resolver.assertUsablePathSettings();
+    } catch (error) {
+      expect(error).toBeInstanceOf(PathSettingError);
+      return (error as Error).message;
+    }
+    throw new Error('assertUsablePathSettings() returned instead of refusing');
+  }
+
+  beforeEach(() => {
+    dir = mkdtempSync(path.join(tmpdir(), 'root-layout-refusal-'));
+    workspace = path.join(dir, 'workspace');
+    mkdirSync(workspace);
+    pathLocations.set({ workspace });
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it.each(Object.keys(DEFINITIONS) as RootType[])(
+    'refuses a %s folder at the workspace root, naming the folder and the move',
+    (type) => {
+      writeUnder(type, DEFINITIONS[type]);
+
+      expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toBe(
+        [
+          `Refusing to start: resource folders at the workspace root are no longer read (retired in 6.0.0); ${workspace} holds resources in ${workspace}/${type}.`,
+          'Expected each folder moved under resources/ (<workspace>/<type>/ becomes <workspace>/resources/<type>/).',
+          `Move: ${workspace}/${type} -> ${workspace}/resources/${type}`,
+        ].join('\n')
+      );
+    }
+  );
+
+  it('names every folder that holds resources, and refuses when resources/ holds the same type too', () => {
+    writeUnder('prompts', DEFINITIONS.prompts);
+    writeUnder('gates', DEFINITIONS.gates);
+    writeUnder('resources', 'prompts', DEFINITIONS.prompts);
+
+    const message = refusalFor(new PathResolver({ cli: {}, packageRoot }));
+
+    expect(message).toContain(`${workspace}/prompts, ${workspace}/gates.`);
+    expect(message).toContain(`Move: ${workspace}/gates -> ${workspace}/resources/gates`);
+    expect(message).toContain(`Move: ${workspace}/prompts -> ${workspace}/resources/prompts`);
+  });
+
+  it('refuses over a --workspace flag as it does over MCP_WORKSPACE', () => {
+    pathLocations.set({});
+    writeUnder('gates', DEFINITIONS.gates);
+
+    expect(refusalFor(new PathResolver({ cli: { workspace }, packageRoot }))).toContain(
+      `Move: ${workspace}/gates -> ${workspace}/resources/gates`
+    );
+  });
+
+  it('ignores a root folder of those names that holds no resource definition', () => {
+    mkdirSync(path.join(workspace, 'prompts'));
+    // A prompt directory directly under the root and a bare .yaml at the root are not served.
+    writeUnder('prompts', 'prompt.yaml');
+    writeUnder('prompts', 'demo', 'prompt.yaml');
+    writeUnder('scripts', 'build.sh');
+    writeUnder('gates', 'notes.md');
+    mkdirSync(path.join(workspace, 'styles'));
+
+    expect(() =>
+      new PathResolver({ cli: {}, packageRoot }).assertUsablePathSettings()
+    ).not.toThrow();
+  });
+
+  it('CONTROL: the resources/ layout starts, and so does a project .claude-prompts/<type>/ the resolver never read', () => {
+    writeUnder('resources', 'prompts', DEFINITIONS.prompts);
+    const project = path.join(dir, 'project');
+    mkdirSync(path.join(project, '.claude-prompts', 'prompts', 'demo', 'hello'), {
+      recursive: true,
+    });
+    writeFileSync(
+      path.join(project, '.claude-prompts', 'prompts', 'demo', 'hello', 'prompt.yaml'),
+      'id: probe\n'
+    );
+    const resolver = new PathResolver({
+      cli: {},
+      packageRoot,
+      projectDiscovery: true,
+      projectLaunch: { env: { CLAUDE_PROJECT_DIR: project }, cwd: dir },
+    });
+
+    expect(() => resolver.assertUsablePathSettings()).not.toThrow();
   });
 });
 
@@ -706,7 +822,7 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(resolver.getWorkspace()).toBe(workspace);
   });
 
-  it('keeps writing into a per-type directory that already exists under the project, and ignores a legacy <project>/.claude-prompts/<type>/', () => {
+  it('keeps writing into a per-type directory that already exists under the project, and ignores a <project>/.claude-prompts/<type>/ folder', () => {
     mkdirSync(path.join(project, '.claude-prompts', 'resources', 'gates'), { recursive: true });
     mkdirSync(path.join(project, '.claude-prompts', 'prompts'));
     const resolver = resolverWithDiscovery();
@@ -737,10 +853,9 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     const resolver = resolverWithDiscovery();
     const primary = resolver.getGatesPath();
 
-    // Lowest first: the bundle, then the workspace candidates.
+    // Lowest first: the bundle, then the workspace's resources folder.
     expect(resolver.getOverlayResourceCandidates('gates', primary)).toEqual([
       path.join(packageRoot, 'resources', 'gates'),
-      path.join(workspace, 'gates'),
       path.join(workspace, 'resources', 'gates'),
     ]);
     expect(resolver.getBundledResourceDir('gates')).toBe(
@@ -758,7 +873,6 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(roots.lookupDirs).toEqual([
       path.join(project, '.claude-prompts', 'resources', 'gates'),
       path.join(workspace, 'resources', 'gates'),
-      path.join(workspace, 'gates'),
       path.join(packageRoot, 'resources', 'gates'),
     ]);
   });
@@ -780,7 +894,6 @@ describe('PathResolver resolves the project directory as a resource root', () =>
       // Lowest precedence first: the walk accumulates, so the last root overwrites.
       expect(roots[kind]).toEqual([
         path.join(packageRoot, 'resources', type),
-        path.join(workspace, type),
         path.join(workspace, 'resources', type),
         path.join(projectResources, type),
       ]);
@@ -791,7 +904,6 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     const projectGates = path.join(project, '.claude-prompts', 'resources', 'gates');
     writeGate(projectGates, 'FROM PROJECT');
     writeGate(path.join(workspace, 'resources', 'gates'), 'FROM WORKSPACE');
-    writeGate(path.join(workspace, 'gates'), 'FROM WORKSPACE LEGACY');
     writeGate(path.join(packageRoot, 'resources', 'gates'), 'FROM BUNDLE');
     const resolver = resolverWithDiscovery();
     const roots = resolveResourceRoots(resolver, 'gates', resolver.getGatesPath());
@@ -832,7 +944,6 @@ describe('PathResolver resolves the project directory as a resource root', () =>
     expect(roots.lookupDirs).toEqual([
       pending,
       path.join(workspace, 'resources', 'gates'),
-      path.join(workspace, 'gates'),
       path.join(packageRoot, 'resources', 'gates'),
     ]);
 
@@ -1004,7 +1115,6 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     expect(pathsAndKinds(resolver, 'prompts')).toEqual([
       [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
       [path.join(resources, 'prompts'), 'profile'],
-      [path.join(workspace, 'prompts'), 'profile'],
       [path.join(dir, 'shared', 'prompts'), 'listed'],
       [path.join(packageRoot, 'resources', 'prompts'), 'bundled'],
       [path.join(configDir, 'extra', 'prompts'), 'listed'],
@@ -1019,7 +1129,6 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     expect(pathsAndKinds(resolver, 'prompts')).toEqual([
       [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
       [path.join(resources, 'prompts'), 'profile'],
-      [path.join(workspace, 'prompts'), 'profile'],
       [path.join(dir, 'shared', 'prompts'), 'listed'],
       [path.join(configDir, 'extra', 'prompts'), 'listed'],
     ]);
@@ -1046,12 +1155,11 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     expect(pathsAndKinds(resolver, 'prompts')).toEqual([
       [path.join(project, '.claude-prompts', 'resources', 'prompts'), 'project'],
       [path.join(workspace, 'resources', 'prompts'), 'profile'],
-      [path.join(workspace, 'prompts'), 'profile'],
       [path.join(dir, 'shared', 'prompts'), 'listed'],
     ]);
   });
 
-  it('keeps a legacy <workspace>/<type> as entry two, and the write root, when it is the only layout present', async () => {
+  it('never lists a <workspace>/<type> folder: entry two and the write root are resources/<type>', async () => {
     const workspace = path.join(dir, 'workspace');
     mkdirSync(path.join(workspace, 'prompts'), { recursive: true });
     pathLocations.set({ workspace });
@@ -1061,11 +1169,10 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     const { locations, writeRoot } = resolver.getResourceLocations('prompts');
     expect(locations.map((location) => location.path)).toEqual([
       path.join(project, '.claude-prompts', 'resources', 'prompts'),
-      path.join(workspace, 'prompts'),
       path.join(workspace, 'resources', 'prompts'),
       path.join(packageRoot, 'resources', 'prompts'),
     ]);
-    expect(writeRoot).toBe(path.join(workspace, 'prompts'));
+    expect(writeRoot).toBe(path.join(workspace, 'resources', 'prompts'));
     expect(resolver.getPromptsPath()).toBe(writeRoot);
   });
 
@@ -1084,7 +1191,6 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
       [
         projectPrompts,
         path.join(resources, 'prompts'),
-        path.join(workspace, 'prompts'),
         path.join(packageRoot, 'resources', 'prompts'),
       ]
     );
@@ -1099,7 +1205,6 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
     expect(roots.lookupDirs).toEqual([
       path.join(project, '.claude-prompts', 'resources', 'gates'),
       path.join(resources, 'gates'),
-      path.join(workspace, 'gates'),
       path.join(dir, 'shared', 'gates'),
       path.join(packageRoot, 'resources', 'gates'),
       path.join(configDir, 'extra', 'gates'),
@@ -1108,7 +1213,6 @@ describe('PathResolver.getResourceLocations builds one ordered list per type', (
       path.join(configDir, 'extra', 'gates'),
       path.join(packageRoot, 'resources', 'gates'),
       path.join(dir, 'shared', 'gates'),
-      path.join(workspace, 'gates'),
       path.join(resources, 'gates'),
     ]);
     expect(roots.bundled).toBe(path.join(packageRoot, 'resources', 'gates'));
@@ -1249,16 +1353,15 @@ describe('PathResolver write root follows paths.writeTarget', () => {
     }
   });
 
-  it("keeps the profile's own layout when writeTarget names the profile's folder", async () => {
-    // A legacy `<workspace>/prompts` collection: naming the profile's folder is the unset answer,
-    // so the write root stays there instead of flattening to `<workspace>/resources/prompts`.
-    mkdirSync(path.join(workspace, 'prompts'));
+  it("answers the profile's own folder when writeTarget names it, as when it is unset", async () => {
     const resolver = await resolverWith(path.join(workspace, 'resources'));
 
     expect(resolver.getProfileResourcesDir()).toBe(path.join(workspace, 'resources'));
-    expect(resolver.getResourceLocations('prompts').writeRoot).toBe(
-      path.join(workspace, 'prompts')
-    );
+    for (const type of TYPES) {
+      expect(resolver.getResourceLocations(type).writeRoot).toBe(
+        path.join(workspace, 'resources', type)
+      );
+    }
   });
 });
 

@@ -133,7 +133,7 @@ it for every client.
 
 ## Configure via config.jsonc
 
-Add an `identity` section to your `config.jsonc` (`config.json` is also still read):
+Add an `identity` section to your config file (`config.jsonc` or `config.json`):
 
 ```json
 {
@@ -303,9 +303,8 @@ In practice:
 | Config history     | By FILE, not scope | See "Config Version History Is Scoped By the File"                                             |
 
 Resource files use launch-time paths, independently of `workspaceId`. Each type uses
-`<workspace>/resources/<type>` when present, otherwise an existing legacy `<workspace>/<type>`
-directory, otherwise `<workspace>/resources/<type>` for its first write. The type directory need
-not exist yet; resolving it creates nothing. This also applies when the workspace is the package
+`<workspace>/resources/<type>`, which its first write creates. The type directory need not exist
+yet; resolving it creates nothing. This also applies when the workspace is the package
 root. The project folder, the `paths.resources` entries and, unless a list leaves `"bundled"` out,
 the bundled resources still contribute to reads. A missing workspace refuses startup.
 
@@ -322,7 +321,6 @@ the bundled resources still contribute to reads. A missing workspace refuses sta
 
 ## See Also
 
-- [Workspace Identity Migration](workspace-organization-identity-migration.md) -- naming migration history
 - [Client Integration](client-integration.md) -- per-client install snippets and verification steps
 - [Client Capabilities Reference](../reference/client-capabilities.md) -- presets, profile mapping, and limits
 - [Injection Control](injection-control.md) -- per-request framework injection

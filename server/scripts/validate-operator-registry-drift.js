@@ -42,31 +42,27 @@ function loadFrameworkOperator(registryText) {
   if (!framework) throw new Error('operators.json declares no `framework` operator');
   return {
     symbol: framework.symbol,
-    deprecated: framework.deprecatedSymbols ?? [],
     pattern: framework.pattern.typescript,
   };
 }
 
-/** `tool-routing.ts` allowlists prefix tokens literally; every declared sigil must be present. */
+/** `tool-routing.ts` allowlists prefix tokens literally; the declared sigil must be present. */
 function checkRoutingAllowlist(operator, source) {
   const match = source.match(/const ALLOWED_PREFIX_TOKENS = \[(.*?)\]/s);
   if (!match) return [`${SITES.routing}: ALLOWED_PREFIX_TOKENS not found (moved or renamed?)`];
 
   const tokens = [...match[1].matchAll(/'([^']*)'/g)].map((m) => m[1]);
-  const required = [operator.symbol, ...operator.deprecated];
-  return required
-    .filter((sigil) => !tokens.includes(sigil))
-    .map(
-      (sigil) =>
-        `${SITES.routing}: ALLOWED_PREFIX_TOKENS is missing '${sigil}', which operators.json ` +
-        `declares for the framework operator. Commands prefixed with it will not route.`
-    );
+  if (tokens.includes(operator.symbol)) return [];
+  return [
+    `${SITES.routing}: ALLOWED_PREFIX_TOKENS is missing '${operator.symbol}', which ` +
+      `operators.json declares for the framework operator. Commands prefixed with it will not route.`,
+  ];
 }
 
 /**
- * The CTA renderer builds the echoed token with a literal sigil. Checking that it uses the
- * CANONICAL one is the point: rendering a deprecated sigil teaches every user the spelling that
- * is being removed.
+ * The CTA renderer builds the echoed token with a literal sigil. Checking that it is the
+ * registry's sigil is the point: rendering any other teaches every user a spelling the parser
+ * does not read as the framework operator.
  */
 function checkCtaSymbol(operator, source) {
   const body = source.match(
@@ -82,7 +78,7 @@ function checkCtaSymbol(operator, source) {
     .map(
       (sigil) =>
         `${SITES.cta}: resolveFrameworkToken renders '${sigil}' but operators.json declares ` +
-        `'${operator.symbol}' canonical. The CTA would teach a deprecated spelling.`
+        `'${operator.symbol}'. The CTA would teach a spelling the parser does not read.`
     );
 }
 
@@ -230,8 +226,16 @@ function selfTest() {
 
   const mutations = [
     ['routing allowlist drops the canonical sigil', 'routing', (s) => s.replace(/'\^', /, '')],
-    ['CTA renders a deprecated sigil', 'cta', (s) => s.replace(/`\^\$\{/g, '`@${')],
-    ['README documents a stale pattern', 'parserDoc', (s) => s.replace(/\[@\\?\^\]/, '@')],
+    [
+      'CTA renders a sigil the registry does not declare',
+      'cta',
+      (s) => s.replace(/`\^\$\{/g, '`@${'),
+    ],
+    [
+      'README documents a stale pattern',
+      'parserDoc',
+      (s) => s.replace('\\^([A-Za-z', '[@^]([A-Za-z'),
+    ],
   ];
 
   let failures = 0;

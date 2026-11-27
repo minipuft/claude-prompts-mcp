@@ -18,7 +18,8 @@ import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { listRetirements, type RetirementEntry } from '../src/shared/utils/retirement-notice.js';
+import { listRetirements, type RetirementEntry } from './lib/retirement-ledger.js';
+import { renderRetirementProjection, RETIREMENT_PROJECTION } from './lib/retirement-projection.js';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -59,15 +60,33 @@ export function compareForPage(a: RetirementEntry, b: RetirementEntry): number {
   return a.retired.localeCompare(b.retired);
 }
 
-/** A table cell: `|` escaped, and a bare `<name>` placeholder turned into code so it is not HTML. */
+/** A spelling a user types as one token: an identifier with no space and no code span of its own. */
+const BARE_SPELLING = /^[^\s`]+$/;
+
+/** A path or name holding a `<name>` placeholder, taken whole: `<workspace>/resources/<type>/`. */
+const PLACEHOLDER_TOKEN = /[\w./-]*<[a-z][a-z-]*>[\w./<>-]*/g;
+
+/**
+ * A table cell: `|` escaped, and a token holding a `<name>` placeholder turned into one code span
+ * so it is not HTML. Text already inside a code span is left as written.
+ */
 function cell(text: string): string {
   return text
-    .replace(/(?<!`)<[a-z][a-z-]*>\/?(?!`)/g, (placeholder) => `\`${placeholder}\``)
+    .split(/(`[^`]*`)/)
+    .map((segment) =>
+      segment.startsWith('`')
+        ? segment
+        : segment.replace(PLACEHOLDER_TOKEN, (token) => `\`${token}\``)
+    )
+    .join('')
     .replaceAll('|', '\\|');
 }
 
+/** A bare identifier of a literal kind is shown as code; a described spelling is shown as prose. */
 function retiredCell(entry: RetirementEntry): string {
-  return LITERAL_KINDS.has(entry.kind) ? `\`${entry.retired}\`` : cell(entry.retired);
+  return LITERAL_KINDS.has(entry.kind) && BARE_SPELLING.test(entry.retired)
+    ? `\`${entry.retired}\``
+    : cell(entry.retired);
 }
 
 function replacementCell(entry: RetirementEntry): string {
@@ -113,9 +132,16 @@ export function renderUpgradingPage(entries: readonly RetirementEntry[]): string
 }
 
 function main(): void {
-  const page = renderUpgradingPage(listRetirements());
-  writeFileSync(path.join(REPO_ROOT, UPGRADING_PAGE), page, 'utf8');
-  console.log(`✓ Wrote ${UPGRADING_PAGE} (${listRetirements().length} entries)`);
+  const entries = listRetirements();
+  writeFileSync(path.join(REPO_ROOT, UPGRADING_PAGE), renderUpgradingPage(entries), 'utf8');
+  writeFileSync(
+    path.join(REPO_ROOT, 'server', RETIREMENT_PROJECTION),
+    renderRetirementProjection(entries),
+    'utf8'
+  );
+  console.log(
+    `✓ Wrote ${UPGRADING_PAGE} and server/${RETIREMENT_PROJECTION} (${entries.length} entries)`
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -10,7 +10,7 @@ import type {
   GateVerdictSubmission,
 } from '#shared/types/gate-evaluation.js';
 
-import { retirementNotice } from '#shared/utils/retirement-notice.js';
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 
 export type GateVerdictSource = 'gate_verdict';
 
@@ -121,7 +121,7 @@ export function describeGateVerdictRefusal(value: unknown): string {
 /** The string form was once accepted, so a string sender also reads when it stopped being. */
 function describeRetiredStringForm(value: unknown): string {
   if (typeof value !== 'string') return '';
-  const notice = retirementNotice('prompt-engine-gate-verdict-string');
+  const notice = retirementNotices.promptEngineGateVerdictString;
   const retired = notice.retired.charAt(0).toUpperCase() + notice.retired.slice(1);
   return ` ${retired} was retired in ${notice.refusedIn}; send ${notice.replacement}.`;
 }

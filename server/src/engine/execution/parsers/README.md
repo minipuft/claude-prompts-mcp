@@ -50,17 +50,17 @@ const hasConditionalOperator = /\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-
 
 ### Operator Patterns Reference
 
-| Operator    | Symbol      | Pattern                                                    | Status      | Example                |
-| ----------- | ----------- | ---------------------------------------------------------- | ----------- | ---------------------- |
-| Chain       | `-->`       | `/-->/`                                                    | Implemented | `>>a --> >>b`          |
-| Gate        | `::` or `=` | `/\s(::\|=)\s*\S/`                                         | Implemented | `:: "criteria"`        |
-| Framework   | `^`         | `/(?:^\|\s)[@^]([A-Za-z0-9_-]+)(?![A-Za-z0-9_-])/`         | Implemented | `^CAGEERF >>prompt`    |
-| Style       | `#`         | `/(?:^\|\s)#([A-Za-z][A-Za-z0-9_-]*)/`                     | Implemented | `#analytical >>report` |
-| Repetition  | `*N`        | `/\s+\*\s*(\d+)/`                                          | Implemented | `>>prompt *3`          |
-| Parallel    | `+`         | `/\s*\+\s*/`                                               | Reserved    | `>>a + >>b + >>c`      |
-| Conditional | `?`         | `/\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-9_-]+)/` | Reserved    | `? "cond" : >>branch`  |
+| Operator    | Symbol | Pattern                                                    | Status      | Example                |
+| ----------- | ------ | ---------------------------------------------------------- | ----------- | ---------------------- |
+| Chain       | `-->`  | `/-->/`                                                    | Implemented | `>>a --> >>b`          |
+| Gate        | `::`   | `/\s::\s*\S/`                                              | Implemented | `:: "criteria"`        |
+| Framework   | `^`    | `/(?:^\|\s)\^([A-Za-z0-9_-]+)(?![A-Za-z0-9_-])/`           | Implemented | `^CAGEERF >>prompt`    |
+| Style       | `#`    | `/(?:^\|\s)#([A-Za-z][A-Za-z0-9_-]*)/`                     | Implemented | `#analytical >>report` |
+| Repetition  | `*N`   | `/\s+\*\s*(\d+)/`                                          | Implemented | `>>prompt *3`          |
+| Parallel    | `+`    | `/\s*\+\s*/`                                               | Reserved    | `>>a + >>b + >>c`      |
+| Conditional | `?`    | `/\s*\?\s*["'](.+?)["']\s*:\s*(?:>>)?\s*([A-Za-z0-9_-]+)/` | Reserved    | `? "cond" : >>branch`  |
 
-**`^` is the framework operator; `@` is a deprecated spelling that still parses.** `@` collides with the file-mention trigger in the harnesses that host this server, so the registry (`operators.json`, `deprecatedSymbols`) names `^` canonical and `@` an alias. A command that spells the framework with `@` runs unchanged and its reply carries one advisory line naming the `^` spelling (`OperatorValidationStage` records it, `ResponseAssembler` renders it); `@` is removed at the next major. A `^word` or `@word` that names no registered framework (`@docs/`, `@mention`) stays literal text.
+**`^` is the framework operator.** A `^word` that names no registered framework stays literal text. `@<framework id>` and the `=` gate operator are refused before any parsing strategy runs, with the replacement named (`retired-operators.ts`, wording from the retirement ledger); any other `@word` (`@docs/`, `@mention`, an email address) is ordinary text.
 
 ### Reserved vs Implemented
 

@@ -20,8 +20,8 @@ Default settings work for most cases. Customize when you're hitting token budget
 ## Configuration (config.jsonc)
 
 All injection settings live under `frameworks.injection`, one nested object per injection type.
-Your workspace's config file is `config.jsonc` by default (`config.json` is still read if that is
-what you have):
+Your workspace's config file is `config.jsonc` or `config.json` (`cpm init` writes
+`config.jsonc`):
 
 ```json
 {

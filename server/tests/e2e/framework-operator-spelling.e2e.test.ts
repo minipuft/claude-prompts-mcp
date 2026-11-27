@@ -1,16 +1,13 @@
-// @lifecycle test - `^` is the framework operator and `@` a deprecated spelling: both run, only `@` is told so.
+// @lifecycle test - `^` is the framework operator; `@<framework>` is refused naming `^`, over a real server.
 /**
  * Over a real server (Streamable HTTP): a command that spells the framework operator `^ReACT`
- * renders the prompt with the framework and says nothing about the spelling; the same command
- * spelled `@ReACT` renders identically AND carries one advisory line naming `^ReACT`.
+ * renders the prompt with the framework; the same command spelled `@ReACT` is refused, the prompt
+ * does not render, and the reply names `^ReACT`. An `@word` that names no framework is ordinary
+ * argument text and the prompt renders.
  *
- * `@` collides with the file-mention trigger in the harnesses that host this server, so the
- * registry (`operators.json`) names `^` canonical and keeps `@` as an alias until the next major.
- * The alias is never refused: the note rides on a successful reply. The advisory is per command,
- * so a chain's later steps (resumed with `chain_id`, not re-parsed) do not repeat it.
- *
- * The unit seam (real parser, stage 06 and ResponseAssembler) is `operator-validation-stage.test.ts`;
- * this proves the line reaches the caller of the built server.
+ * The refusal is `parseCommand`'s (`retired-operators.ts`), the one parse entry both transports
+ * reach; the unit seam is `retired-operators.test.ts`. This proves the refusal reaches the caller
+ * of the built server.
  */
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals';
 
@@ -26,14 +23,9 @@ import {
   waitForHealth,
 } from './helpers/http-mcp-client.js';
 
-const NOTE =
-  'Deprecated spelling: `@ReACT` still works, but the framework operator is `^ReACT`; ' +
-  '`@` is removed at the next major.';
 const BODY = 'SPELLING-PROBE-BODY';
 
-const occurrences = (text: string, needle: string): number => text.split(needle).length - 1;
-
-describe('Streamable HTTP: the framework operator is `^`, and `@` is a deprecated alias', () => {
+describe('Streamable HTTP: the framework operator is `^`, and `@<framework>` is refused', () => {
   const cleanup: Array<() => void | Promise<void>> = [];
   let client: ModernMcpClient;
   let nextId = 1;
@@ -82,32 +74,26 @@ describe('Streamable HTTP: the framework operator is `^`, and `@` is a deprecate
     for (const step of cleanup.reverse()) await step();
   });
 
-  test('`^ReACT >>p` renders the prompt with the framework and carries no spelling note', async () => {
+  test('`^ReACT >>p` renders the prompt with the framework', async () => {
     const reply = await tool('prompt_engine', { command: '^ReACT >>spelling_probe' });
 
     expect(reply.isError).toBe(false);
     expect(reply.text).toContain(BODY);
-    expect(reply.text).toContain('ReACT');
-    expect(reply.text).not.toContain('Deprecated spelling');
+    expect(reply.text).toContain('Re-run: `^react >>spelling_probe`');
   }, 120000);
 
-  test('`@ReACT >>p` renders the same prompt and carries the note exactly once, naming `^`', async () => {
+  test('`@ReACT >>p` is refused, renders nothing, and names `^ReACT`', async () => {
     const reply = await tool('prompt_engine', { command: '@ReACT >>spelling_probe' });
+
+    expect(reply.isError).toBe(true);
+    expect(reply.text).not.toContain(BODY);
+    expect(reply.text).toContain('Use the `^` framework operator (`^<framework id>`): `^ReACT`.');
+  }, 120000);
+
+  test('an `@word` that names no framework is argument text, and the prompt renders', async () => {
+    const reply = await tool('prompt_engine', { command: '>>spelling_probe ask @someone' });
 
     expect(reply.isError).toBe(false);
     expect(reply.text).toContain(BODY);
-    expect(reply.text).toContain('ReACT');
-    expect(occurrences(reply.text, NOTE)).toBe(1);
   }, 120000);
-
-  test.each(['^ReACT >>spelling_probe', '@ReACT >>spelling_probe'])(
-    'the re-run line for `%s` spells the framework `^`',
-    async (command) => {
-      const reply = await tool('prompt_engine', { command });
-
-      expect(reply.isError).toBe(false);
-      expect(reply.text).toContain('Re-run: `^react >>spelling_probe`');
-    },
-    120000
-  );
 });

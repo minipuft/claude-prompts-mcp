@@ -166,6 +166,23 @@ const JSONC_PARSER_ESM_ENTRY = resolveEsmEntry("jsonc-parser", SERVER_ROOT);
  * before the change: 998,494 B, leaving 1,506 B — less than one gate-schema edit, and the next
  * slices all touch schemas this bundle reaches. The step is 100,000 for the same reason as the
  * last one. BUNDLE_BUDGET_BYTES (shipped, minified) is untouched for the sixth time.
+ *
+ * BUNDLE_BUDGET_BYTES held, not raised, on 2026-11-27 (retirement-ledger branch). Refusing the
+ * pre-5.0 config file, the root folder layout and the retired script fields put the whole
+ * retirement ledger into this bundle (the JSON plus its shape check), and the minified build
+ * measured 514,993 B against 512,000; its base, `7f2a4910`, measures 507,458 B. Reclaimed by
+ * structure, every refusal's text unchanged (a `cmp` of `cpm`'s refusals before and after):
+ *
+ *   | step                                                                    | minified  |
+ *   | ----------------------------------------------------------------------- | --------- |
+ *   | branch head: ledger JSON + shape check bundled                          | 514,993 B |
+ *   | generated projection of the three printed fields, check left in scripts | 510,954 B |
+ *   | one exported constant per entry, read through a namespace import        | 509,007 B |
+ *   | pre-5.0 key table stated as rename rules; removed keys as one record    | 507,960 B |
+ *
+ * The third row is tree-shaking: `cpm` now carries the 10 entries its code reads, not all 16.
+ * 507,960 leaves 4,040 B; the ledger grows with every retirement, and each entry `cpm` reaches
+ * costs its text. Re-measure before quoting this figure.
  */
 export const BUNDLE_BUDGET_BYTES = 512_000; // 500KB — shipped (minified)
 export const DEV_BUNDLE_BUDGET_BYTES = 1_100_000; // ~1074KB — unminified dev build

@@ -6,7 +6,6 @@ interface ToolParameter {
   status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental';
   required?: boolean;
   default?: unknown;
-  compatibility: 'canonical' | 'deprecated' | 'legacy'; // Required with default value
   examples?: string[];
   notes?: string[];
   enum?: string[]; // For enum types with explicit values
@@ -45,7 +44,6 @@ export const prompt_engineParameters: ToolParameter[] = [
       'Prompt ID to expand. Format: >>prompt_id key="value" | Chains: >>s1 --> >>s2 | Modifiers first: ^Framework :: "criteria" %clean/%lean | Shell verify: :: verify:"cmd" :preset | Criteria inside one :: quote split on , ; or |',
     required: false,
     status: 'working',
-    compatibility: 'canonical',
     examples: [
       "^CAGEERF #analytical >>analyze topic:'metrics' --> >>report :: 'cite sources'",
       ">>fix-bug :: verify:'npm test' :full loop:true",
@@ -69,7 +67,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Resume token (chain-{prompt} or chain-{prompt}#runNumber). Send output, gate_verdict or gate_action with chain_id. Omit command except a leading '-->' append.",
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'user_response',
@@ -77,7 +74,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Step output for chain_id. Canonical bytes are the entire user_response.trim(), without Unicode normalization or metadata stripping. Required semantic review: capture output alone first, then prefer a report-only verdict. Resent work must match that node's captured canonical whole bytes; different or defined-empty work paired with PASS or FAIL is refused before effects. An accepted renewing semantic FAIL clears its target: capture replacement separately before reporting. Another node's body stays scoped to that node.",
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'gate_verdict',
@@ -85,7 +81,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Review object {overall:'PASS'|'FAIL',rationale,per_gate?:[{index,passed,rationale,evaluation?}],reminders?}; a string is refused. Check/evaluation entries are per_gate; reminders attest reminder-tier gates. Required semantic_evaluation needs evaluation with server-issued binding, typed observations and captured evidence; report pins never supply authority. Failed attributable reports derive FAIL despite client PASS; missing, stale or misaddressed reports refuse without charge. Evidence uses UTF-16 spans and captured UTF-8 hashBytes digest. Requested evaluation is separate from optional client-reported reviewer; host/native identity remains unknown.",
     status: 'working',
-    compatibility: 'canonical',
     notes: [
       'State-conditional: advertised only while the gate system is enabled. Part of the declared union surface regardless — see CLAUDE.md §Public API Contract.',
       'Overall and per_gate rationales are nonempty, single-line and trimmed. Report observation rationales are strings and may span lines; they are not rendered into the verdict rationale.',
@@ -103,7 +98,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Run action. 'abort' stops the existing run named by 'chain_id' in any nonterminal state, including active runs, blocking-unknown pauses, ordinary reviews and detached holds. No command, review, retry exhaustion, node selection, trailer or report is required; it starts no work and consumes no report. State and artifacts are retained; repeated abort of an already-cancelled run succeeds. Completed, failed, missing or out-of-scope runs return a non-applied refusal. 'pause' persists a conversation pause on the scoped run so you can discuss the step with the user; 'resume' clears it explicitly; 'abort' still ends the run. Send pause or resume with 'chain_id' only. AFTER A FAILED GATE exhausts its retry limit: 'retry' resets attempts (semantic retry renews the server attempt and requires separate replacement capture), 'skip' records operational BYPASS and continues without an evaluated PASS/FAIL. ON A BLOCKING-UNKNOWN INTERRUPT ('__unknown_interrupt__', raised only with budget.pauseOnBlocking): 'resume' clears the pause and issues the investigation step as written, 'accept_alternative' replaces the remaining run with 'remainder' on the SAME call (refused without one).",
     status: 'working',
-    compatibility: 'canonical',
     notes: [
       "Core parameter: advertised independently of gate-system enablement. With gates disabled, 'retry' and 'skip' receive a named refusal; 'abort', 'pause', 'resume' and 'accept_alternative' remain available.",
       "'pause' and 'resume' are control calls. Sent with user_response, gate_verdict, remainder, observations, command, workflow, force_restart, handoff, claim_token, inputs, options or gates they are refused before anything changes; presence decides, so an empty string or false still counts as sent. Nothing implicitly resumes a conversation pause.",
@@ -121,7 +115,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       'Gate inputs: registered ID strings; quick {name,description}; full definitions with id,name,severity,criteria[],pass_criteria[],guidance,apply_to_steps[]. Inline :: verify:"command" checks exit status under operator allowlists. Presets fast (1 attempt/30s), full (5/5min), extended (10/10min); options max:N,timeout:N,loop:true. Example: >>fix-bug :: verify:"npm test" :full loop:true. Semantic criteria use the bound report workflow in user_response/gate_verdict.',
     status: 'working',
-    compatibility: 'canonical',
     examples: [
       '[{"name": "Source Quality", "description": "All sources must be official docs"}]',
       ':: verify:"npm test" :full loop:true',
@@ -140,7 +133,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Start a new execution instead of resuming one. Cannot be combined with 'chain_id' (that pair is rejected). Redundant with a plain 'command', which already starts a new chain; it matters only when the command text itself carries a chain id. Distinct from gate_action:'abort': force_restart abandons the current run and immediately begins a new one, while abort ends it and starts nothing.",
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'handoff',
@@ -148,7 +140,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Mint a single-use handoff token for the run named by 'chain_id', so another client (Codex, OpenCode, a different Claude Code conversation) can claim and continue it. Requires 'chain_id'; nothing else is read. Minting again rotates the token. The run stays yours until the claim lands; your copy is retired on the next persist after that.",
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'claim_token',
@@ -156,7 +147,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Claim a run minted elsewhere with 'handoff' and resume it in this conversation in the same call. Send the token ALONE — it names the run, so omit command and chain_id. Single-use: a claimed, rotated, or ended token is refused by name. A claim never rewrites workspace scope; a run from another workspace is refused.",
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'options',
@@ -164,7 +154,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       'Legacy prompt argument/options map. Values remain typed; inline command arguments take precedence. Prefer `inputs` for prompt arguments, especially arrays and objects.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'inputs',
@@ -172,7 +161,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Typed prompt arguments supplied outside command-string grammar. Use for arrays, objects, quotes, backslashes, or any value that must arrive byte-for-byte. Precedence: inline command argument > inputs > legacy options > prompt default. On a `-->` chain command they apply to the first segment's prompt; later segments take their arguments from the command text and the previous step's output.",
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'observations',
@@ -180,7 +168,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Declare typed unknowns discovered or resolved this step, feeding the per-run unknowns ledger. Two shapes: `{type:'unknown_discovered', id:'kebab-case-slug', statement:'...', blocking?:true|false, target_step_id?:'...'}` opens a ledger entry; `{type:'unknown_resolved', id:'kebab-case-slug', statement:'...', resolution:'answered'|'irrelevant'}` closes one (statement carries the resolution statement). `target_step_id` on a discovered entry names the downstream step (stable node id, e.g. 'draft-outline' or 'n3') the adaptive mutation policy skips if this unknown later resolves 'irrelevant'.",
     status: 'working',
-    compatibility: 'canonical',
     examples: [
       '[{"type": "unknown_discovered", "id": "cache-ttl-unknown", "statement": "TTL for the new cache layer is undecided", "blocking": false, "target_step_id": "draft-outline"}]',
       '[{"type": "unknown_resolved", "id": "cache-ttl-unknown", "statement": "TTL confirmed at 300s per ops runbook", "resolution": "answered"}]',
@@ -200,7 +187,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Submit a structured multi-step run instead of a command string. MUTUALLY EXCLUSIVE with 'command' and 'chain_id' — a call carrying more than one is rejected, never resolved by precedence. SHAPE: `{version:1, nodes:[{id:'kebab-case', promptId:'...', stepName?:'...', args?:{}, inputMapping?:{}, outputMapping?:{}, visibility?:{withhold?:[...], expose?:[...]}, subagentModel?:'heavy'|'standard'|'fast', agentType?:'...', framework?:'...', retries?:0, inlineGateIds?:['gate-id'], inlineGateCriteria?:['raw :: token'], delegated?:<boolean>, await?:'node'|'run'}], edges?:[{from:'node-a', to:'node-b'}], gates?:[<same shapes as the 'gates' parameter>], budget?:{maxNodes?:<=32, maxFanOut?:<=8, maxInsertions?:<=3, declaredCostCeiling?:<number>, pauseOnBlocking?:<boolean, default false>}}`. Full field reference: docs/reference/workflow-ir.md.",
     status: 'working',
-    compatibility: 'canonical',
     examples: [
       '{"version": 1, "nodes": [{"id": "research", "promptId": "research_docs"}, {"id": "draft", "promptId": "write_summary"}], "edges": [{"from": "research", "to": "draft"}]}',
       '{"version": 1, "nodes": [{"id": "gather", "promptId": "research_docs", "args": {"topic": "caching"}, "outputMapping": {"findings": "gather"}}, {"id": "review", "promptId": "code_review", "subagentModel": "fast", "visibility": {"withhold": ["chain_history"]}}], "edges": [{"from": "gather", "to": "review"}], "gates": [{"id": "source-quality", "target_step_id": "gather"}], "budget": {"maxInsertions": 1, "declaredCostCeiling": 50000}}',
@@ -219,7 +205,6 @@ export const prompt_engineParameters: ToolParameter[] = [
     description:
       "Rewrite the rest of a RUNNING chain when a blocking unknown has invalidated its shape. SHAPE: `{mode:'replace'|'append', nodes:[<Workflow IR nodes — same shape as workflow.nodes>], edges?:[{from,to}]}`. 'replace' discards every node strictly AFTER the current one and puts these in their place; 'append' adds them strictly after the current remainder and keeps it. The current node is never touched by either mode. Requires 'chain_id'. You author the alternative; the server only validates it — same node/edge schemas, same structural caps as a `workflow` submission, and rejection is all-or-nothing.",
     status: 'working',
-    compatibility: 'canonical',
     examples: [
       '{"mode": "replace", "nodes": [{"id": "confirm-ttl", "promptId": "investigate_unknown"}, {"id": "redraft", "promptId": "write_summary"}], "edges": [{"from": "confirm-ttl", "to": "redraft"}]}',
       '{"mode": "append", "nodes": [{"id": "verify-fix", "promptId": "code_review"}]}',

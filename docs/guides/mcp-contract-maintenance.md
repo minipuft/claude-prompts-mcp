@@ -23,7 +23,8 @@ alone. A labelled list in a contract description (`ACTIONS: a | b`) must name ex
 the enum it restates. `npm run validate:framework-tool-descriptions` checks both that and the
 bundled frameworks' guidance.
 
-Contracts no longer generate Zod schemas — `mcp-schemas.ts` has been removed.
+Contracts generate no Zod schemas: the hand-written schemas in `src/mcp/tools/schemas/` own
+runtime validation.
 
 ## Critical: Upstream Verification
 
@@ -121,7 +122,7 @@ Edit `tooling/contracts/*.json`:
 
 - Use the SAME parameter name as the service
 - Use the SAME type as the service
-- Include proper `status`, `compatibility`, and migration notes
+- Include a proper `status` and migration notes; a retired spelling is recorded in the retirement ledger (`tooling/contracts/registries/retirements.json`), not labelled on the parameter
 
 ### Step 3: Update Types (if needed)
 

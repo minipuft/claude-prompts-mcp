@@ -188,7 +188,7 @@ export function resolvePinnedSemanticContext(
 
 /** Rendering observes server authority, never a client's submitted binding. */
 export interface FrozenReviewProjection {
-  readonly submission: 'legacy' | 'capture-first' | 'report' | 'unavailable';
+  readonly submission: 'verdict-only' | 'capture-first' | 'report' | 'unavailable';
   readonly definitions?: readonly SemanticReviewDefinitionInput[];
   readonly semanticReviews: readonly SemanticReviewPromptInput[];
   readonly capturedOutput?: string;
@@ -281,7 +281,7 @@ function projectFrozenGate(
 /** Frozen public definitions, expected pins and actual captured output for every render consumer. */
 export function projectFrozenReview(review: PendingGateReview): FrozenReviewProjection {
   const issued = review.semanticContext;
-  if (issued === undefined) return { submission: 'legacy', semanticReviews: [] };
+  if (issued === undefined) return { submission: 'verdict-only', semanticReviews: [] };
   try {
     assertReviewIdentity(issued, review.nodeId);
     const required = new Set(selectToolReviewGateIds(review));
@@ -299,7 +299,7 @@ export function projectFrozenReview(review: PendingGateReview): FrozenReviewProj
     return {
       submission:
         semanticReviews.length === 0
-          ? 'legacy'
+          ? 'verdict-only'
           : issued.target === undefined
             ? 'capture-first'
             : 'report',

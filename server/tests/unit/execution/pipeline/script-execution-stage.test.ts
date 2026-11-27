@@ -89,7 +89,6 @@ describe('ScriptExecutionStage', () => {
         ),
       filterByTrigger: jest.fn().mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       } satisfies ToolTriggerFilterResult),
@@ -207,7 +206,6 @@ describe('ScriptExecutionStage', () => {
       scriptExecutor.execute.mockResolvedValue(createExecutionResult({ output: { valid: true } }));
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
@@ -257,7 +255,6 @@ describe('ScriptExecutionStage', () => {
       );
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
@@ -307,7 +304,6 @@ describe('ScriptExecutionStage', () => {
       );
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
@@ -360,7 +356,6 @@ describe('ScriptExecutionStage', () => {
       );
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
@@ -411,7 +406,6 @@ describe('ScriptExecutionStage', () => {
       );
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
@@ -464,7 +458,6 @@ describe('ScriptExecutionStage', () => {
       scriptExecutor.execute.mockResolvedValue(createExecutionResult({ output: { valid: true } }));
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [
           {
             toolId: 'normal-tool',
@@ -523,7 +516,6 @@ describe('ScriptExecutionStage', () => {
       toolDetectionService.detectTools.mockReturnValue([match]);
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [match],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
@@ -580,7 +572,6 @@ describe('ScriptExecutionStage', () => {
       });
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
@@ -631,7 +622,6 @@ describe('ScriptExecutionStage', () => {
       });
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
@@ -684,7 +674,6 @@ describe('ScriptExecutionStage', () => {
       });
       toolTriggerFilter.filterByTrigger.mockReturnValue({
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [],
         requiresConfirmation: false,
       });
