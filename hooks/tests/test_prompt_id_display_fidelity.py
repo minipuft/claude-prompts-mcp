@@ -127,7 +127,7 @@ class TestChainStepsUseAuthoredCasing:
 
 @pytest.mark.parametrize("typed", ["Parent/Child", "parent/child", "PARENT/CHILD", "Parent/Child/Deep"])
 def test_qualified_catalog_and_verbatim_command(stub_catalog, monkeypatch, capsys, typed):
-    command = f'%clean @CAGEERF >>{typed} marker:"child value"'
+    command = f'%clean ^CAGEERF >>{typed} marker:"child value"'
     ctx = context_of(run_hook(monkeypatch, capsys, command))
     assert f"[>> prompt_engine] {_lookup(typed)['id']}" in ctx
     assert f'command:"{command}"' in ctx
@@ -165,10 +165,9 @@ def test_chain_preview_preserves_qualified_ids(stub_catalog, monkeypatch, capsys
 def test_advisory_modifiers_ignore_quotes_and_unicode_arrow():
     from operators import detect_operator
 
-    assert detect_operator('text:"@CAGEERF #analytical ==>"', "framework") == []
-    assert detect_operator('text:"@CAGEERF #analytical ==>"', "style") == []
-    assert detect_operator('text:"@CAGEERF #analytical ==>"', "delegation") == []
-    assert detect_operator("@CAGEERF >>Parent/Child", "framework") == ["CAGEERF"]
-    assert detect_operator("^CAGEERF >>Parent/Child", "framework") == ["CAGEERF"]
     assert detect_operator('text:"^CAGEERF #analytical ==>"', "framework") == []
+    assert detect_operator('text:"^CAGEERF #analytical ==>"', "style") == []
+    assert detect_operator('text:"^CAGEERF #analytical ==>"', "delegation") == []
+    assert detect_operator("^CAGEERF >>Parent/Child", "framework") == ["CAGEERF"]
+    assert detect_operator("@CAGEERF >>Parent/Child", "framework") == []
     assert prompt_suggest.detect_chain_syntax(">>notes → >>reviewCard") == []

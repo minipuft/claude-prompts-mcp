@@ -71,6 +71,43 @@
       "refusedIn": "6.0.0",
       "forgetAfter": "2027-06-01",
       "docPattern": "gate_verdict\"?\\s*[:=]\\s*['\"]"
+    },
+    {
+      "id": "folder-layout-workspace-root",
+      "kind": "folder-layout",
+      "retired": "resource folders at the workspace root",
+      "replacement": "each folder moved under resources/ (<workspace>/<type>/ becomes <workspace>/resources/<type>/)",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "<workspace>/(prompts|gates|frameworks|styles|scripts)\\b"
+    },
+    {
+      "id": "command-framework-at-sigil",
+      "kind": "command-operator",
+      "retired": "the `@` framework sigil (`@<framework id>`)",
+      "replacement": "the `^` framework operator (`^<framework id>`)",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "(?:^|[\\s`'\"(|>])@(?:CAGEERF|ReACT|ReAct|5W1H|SCAMPER|FOCUS|NAME|framework)\\b|(?:^|[\\s`'\"(])@[A-Za-z][A-Za-z0-9_-]*\\s*>>"
+    },
+    {
+      "id": "command-gate-equals-operator",
+      "kind": "command-operator",
+      "retired": "the `=` gate operator (`>>prompt = \"criteria\"`)",
+      "replacement": "the `::` gate operator (`>>prompt :: \"criteria\"`)",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": ">>[A-Za-z0-9_/-]+\\s+=\\s*[\"']"
+    },
+    {
+      "id": "config-file-unversioned",
+      "kind": "config-file",
+      "retired": "a config file with no \"version\" key (the pre-5.0 shape)",
+      "replacement": "\"version\": 5 at the top level of the file",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": null,
+      "docPatternReason": "the retired spelling is the absence of a key, which no text search can find; its pre-5.0 keys are named only in the refusal's own table"
     }
   ]
 }

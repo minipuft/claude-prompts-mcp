@@ -13,7 +13,7 @@
       "node": ">=22.13.0"
     }
   },
-  "description": "Model Context Protocol (MCP) server for versioned prompt templates, multi-step workflow chains, and quality gates. Symbolic syntax: >>prompt --> >>chain @framework :: 'gate'",
+  "description": "Model Context Protocol (MCP) server for versioned prompt templates, multi-step workflow chains, and quality gates. Symbolic syntax: >>prompt --> >>chain ^framework :: 'gate'",
   "display_name": "Claude Prompts",
   "documentation": "https://github.com/minipuft/claude-prompts-mcp#readme",
   "homepage": "https://github.com/minipuft/claude-prompts-mcp",
@@ -29,7 +29,7 @@
     "reasoning"
   ],
   "license": "MIT",
-  "long_description": "Turn your prompt library into a programmable engine. Hot-reload for live editing, symbolic command syntax (>>prompt --> >>chain @framework :: 'gate'), framework injection, and self-evaluating quality gates. For shared user-authored skills, rules, and global instructions, ~/.claude is the canonical source of truth; Codex and OpenCode installations are one-way downstream projections. MCP prompt YAML in this package remains canonical for skills compiled from server resources. Supports version history, rollback, and hooks for extra reliability",
+  "long_description": "Turn your prompt library into a programmable engine. Hot-reload for live editing, symbolic command syntax (>>prompt --> >>chain ^framework :: 'gate'), framework injection, and self-evaluating quality gates. For shared user-authored skills, rules, and global instructions, ~/.claude is the canonical source of truth; Codex and OpenCode installations are one-way downstream projections. MCP prompt YAML in this package remains canonical for skills compiled from server resources. Supports version history, rollback, and hooks for extra reliability",
   "manifest_version": "0.3",
   "name": "claude-prompts",
   "repository": {

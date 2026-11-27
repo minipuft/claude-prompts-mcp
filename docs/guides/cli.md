@@ -393,7 +393,7 @@ Exit codes: `0` success, `1` error or validation failure.
 //   — Which shape this config file is written in. `5` is the current format...
   "version": 5,
 
-//   — Server identity and transport settings.
+//   — Server name and port.
 //   "server": {
 //     — Server name reported to MCP clients.
 //     — default: "claude-prompts"
@@ -460,12 +460,6 @@ cpm enable resources --json         # resources.registerWithMcp = true (JSON out
 
 Reports "already enabled/disabled" without writing when the value is unchanged. Exit codes: `0` success, `1` unknown subsystem or error.
 
-> **Changed in 3.1.2.** These nine keys were previously `*.mode` holding `"on"`/`"off"`, which no
-> reader consulted — the command reported success and changed nothing. A `config.json` still
-> carrying a `*.mode` key is adopted into the boolean on load, so no edit is required; `cpm config
-set` no longer accepts the old spelling. `telemetry.mode`, `phaseGuards.mode` and `identity.mode`
-> are unaffected — those are read, and none of them is an on/off toggle.
-
 ## Write Validation Behavior
 
 - `create`, `init`, `rename`, `move`, `toggle`, `link-gate`, and `rollback` run post-write schema validation by default.
@@ -495,7 +489,7 @@ The CLI resolves the workspace directory in this priority order:
 2. `MCP_WORKSPACE` environment variable
 3. Current working directory
 
-Within a workspace, it checks `resources/<type>/` first, then `<type>/` as a legacy fallback.
+Within a workspace, it reads `resources/<type>/`.
 
 ## Architecture
 

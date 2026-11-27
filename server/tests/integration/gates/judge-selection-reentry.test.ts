@@ -24,7 +24,7 @@ import type { Logger } from '../../../src/infra/logging/index.js';
  * JudgeSelectionStage); only the logger is mocked.
  */
 
-const JUDGE_REPLY = '>>demo @cageerf :: code-quality #analytical';
+const JUDGE_REPLY = '>>demo ^cageerf :: code-quality #analytical';
 
 function createLogger(): Logger {
   return {

@@ -296,7 +296,7 @@ def get_valid_frameworks() -> list[str]:
     """
     Get list of valid framework names.
 
-    Returns lowercase framework names that can be used with the @ operator.
+    Returns lowercase framework names that can be used with the ^ operator.
     """
     return get_valid_frameworks_from_db()
 

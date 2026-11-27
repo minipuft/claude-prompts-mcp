@@ -116,7 +116,7 @@ describe('P6.178: the Re-run line re-parses to the command that produced it', ()
     '>>sv_a :: q:"be good"',
     '>>sv_a :: verify:"npm test"',
     '>>sv_a :: verify:"npm test" :fast loop:true max:3 timeout:20',
-    '@ReACT >>sv_a',
+    '^ReACT >>sv_a',
     '%clean >>sv_a',
     '#concise >>sv_a',
   ])('twin: %s round-trips', async (command) => {

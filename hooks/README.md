@@ -45,7 +45,7 @@ contract.
 
 ### `prompt-suggest.py` (UserPromptSubmit)
 
-Triggers on every user message. Detects `>>prompt` syntax and suggests the correct `prompt_engine` call. The framework operator is `^` (`^CAGEERF >>analyze`); the hook still detects `@` as a deprecated alias and renders either as `^`.
+Triggers on every user message. Detects `>>prompt` syntax and suggests the correct `prompt_engine` call. The framework operator is `^` (`^CAGEERF >>analyze`).
 
 Annotations preserve whole slash-qualified references and typed case; display resolves through
 the authored catalog ID. Quoted markers and delimiters do not create invocations or chain previews.

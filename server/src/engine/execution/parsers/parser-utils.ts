@@ -1,13 +1,13 @@
 // @lifecycle canonical - Shared helpers for command parsing normalization.
-import { FRAMEWORK_SIGIL_CLASS, OPERATOR_PATTERNS } from './operator-patterns.js';
+import { FRAMEWORK_SIGIL_SOURCE, OPERATOR_PATTERNS } from './operator-patterns.js';
 
 import { isAcceptedPromptReference } from '#shared/utils/resource-ids.js';
 
 /** Framework operator core match, from the operators.json registry (SSOT). */
 const FRAMEWORK_OPERATOR_PATTERN = OPERATOR_PATTERNS.framework.pattern;
 
-/** A leading `>>` that precedes a framework operator (`>> ^CAGEERF …`), sigils from the registry. */
-const FRAMEWORK_PREFIX_AFTER_MARKER = new RegExp(`^>>\\s*${FRAMEWORK_SIGIL_CLASS}`);
+/** A leading `>>` that precedes a framework operator (`>> ^CAGEERF …`), sigil from the registry. */
+const FRAMEWORK_PREFIX_AFTER_MARKER = new RegExp(`^>>\\s*${FRAMEWORK_SIGIL_SOURCE}`);
 
 export const PROMPT_INVOCATION_MARKER_PATTERN = /(?<!>)>>/g;
 export const PROMPT_SELECTOR_PREFIX_PATTERN = /^\s*(?:>>|\/)?\s*/;
@@ -150,8 +150,6 @@ export function isPositionInsideQuotes(str: string, position: number): boolean {
 export interface FrameworkOperatorMatch {
   /** The framework ID (without its sigil) */
   frameworkId: string;
-  /** The sigil as typed: the canonical `^`, or a deprecated spelling the registry still accepts */
-  sigil: string;
   /** Position in the string where the match starts */
   position: number;
   /** The full matched string including the sigil and any leading whitespace */
@@ -159,59 +157,40 @@ export interface FrameworkOperatorMatch {
 }
 
 /**
- * Find a framework operator (`^word`, or the deprecated `@word`) outside of quoted strings.
- * Returns the first match found, or null if no framework operator exists outside quotes.
+ * Every sigil-word match of `pattern` (a sigil followed by a captured id) that stands in operator
+ * position, in order. Operator position means outside quoted strings, and an id followed by
+ * whitespace, the end of the string, or one of `, ; : ) ] } >`. An id followed by `/` or `.` is a
+ * path or file reference (`@docs/path`, `^file.md`), never an operator.
  *
- * Automatically skips sigil-word patterns that look like file paths or references:
- * - Contains '/' (e.g., @docs/path, @src/file)
- * - Contains '.' (e.g., @file.md, @config.json)
+ * The pattern decides where the sigil may start: the registry's framework pattern admits the
+ * start of the string or a preceding whitespace character, so `a^b` and `me@home` never match.
+ */
+export function findSigilOperatorsOutsideQuotes(
+  str: string,
+  pattern: RegExp
+): FrameworkOperatorMatch[] {
+  const global = new RegExp(
+    pattern.source,
+    pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`
+  );
+  const found: FrameworkOperatorMatch[] = [];
+  for (const match of str.matchAll(global)) {
+    const frameworkId = match[1];
+    if (!frameworkId || isPositionInsideQuotes(str, match.index)) continue;
+    const nextChar = str[match.index + match[0].length];
+    if (nextChar !== undefined && !/[\s,;:)\]}>]/.test(nextChar)) continue;
+    found.push({ frameworkId, position: match.index, fullMatch: match[0] });
+  }
+  return found;
+}
+
+/**
+ * Find the first framework operator (`^word`) in operator position, or null when there is none.
  *
- * This makes detection robust regardless of whether content is quoted.
- *
- * @param str - The command string to search
- * @returns The match details, or null if not found outside quotes
+ * The core match is the operators.json registry pattern (SSOT); the quote-awareness and the
+ * path/reference rejection are {@link findSigilOperatorsOutsideQuotes}', which a single regular
+ * expression cannot express.
  */
 export function findFrameworkOperatorOutsideQuotes(str: string): FrameworkOperatorMatch | null {
-  // Core match derives from the operators.json registry (SSOT) — this used to be a second,
-  // hand-maintained copy, which is why relaxing the registry pattern alone changed nothing
-  // observable (plan row D6) and why the registry then sat two revisions stale without any gate
-  // noticing (row D9). The registry's trailing `(?![A-Za-z0-9_-])` is redundant against a greedy
-  // `[A-Za-z0-9_-]+` but harmless, so the two are behaviourally identical on the match itself.
-  //
-  // What does NOT derive: the quote-awareness and the `@docs/` / `@file.ext` rejection below.
-  // A single regex cannot express them, which is why this extractor still exists rather than
-  // being replaced by the registry pattern outright.
-  const pattern = new RegExp(FRAMEWORK_OPERATOR_PATTERN.source, 'g');
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(str)) !== null) {
-    const position = match.index;
-    const frameworkId = match[1];
-
-    if (!frameworkId) continue;
-
-    // Skip if inside quotes
-    if (isPositionInsideQuotes(str, position)) continue;
-
-    // Check what character follows the match (if any)
-    const endPosition = position + match[0].length;
-    const nextChar = str[endPosition];
-
-    // Skip if followed by '/' or '.' - clearly a path/reference, not a framework
-    // Examples: @docs/path, @file.md, @src/components
-    if (nextChar === '/' || nextChar === '.') continue;
-
-    // Valid framework operator must be followed by whitespace, end of string,
-    // or certain punctuation that wouldn't be part of a path
-    if (nextChar !== undefined && !/[\s,;:)\]}>]/.test(nextChar)) continue;
-
-    return {
-      frameworkId,
-      sigil: match[0].trimStart().charAt(0),
-      position,
-      fullMatch: match[0],
-    };
-  }
-
-  return null;
+  return findSigilOperatorsOutsideQuotes(str, FRAMEWORK_OPERATOR_PATTERN)[0] ?? null;
 }

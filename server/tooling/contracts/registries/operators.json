@@ -44,7 +44,7 @@
       "description": "Quality gate for validation",
       "purpose": "Add inline validation criteria",
       "pattern": {
-        "typescript": "\\s+(::|=(?![=>]))\\s*(?:([a-z][a-z0-9_-]*):[\"']([^\"']+)[\"']|[\"']([^\"']+)[\"']|([^\\s\"']+))",
+        "typescript": "\\s+(::)\\s*(?:([a-z][a-z0-9_-]*):[\"']([^\"']+)[\"']|[\"']([^\"']+)[\"']|([^\\s\"']+))",
         "flags": "gi"
       },
       "variants": [
@@ -63,19 +63,13 @@
     {
       "id": "framework",
       "symbol": "^",
-      "deprecatedSymbols": ["@"],
-      "deprecationNote": "`@` is the original spelling and still parses. `^` is canonical because `@` collides with the file-picker / mention trigger in every host harness. `@` is removed at the next major.",
       "role": "prefix",
       "description": "Apply a framework",
       "purpose": "Inject framework guidance (CAGEERF, ReACT, etc.)",
       "pattern": {
-        "typescript": "(?:^|\\s)[@^]([A-Za-z0-9_-]+)(?![A-Za-z0-9_-])"
+        "typescript": "(?:^|\\s)\\^([A-Za-z0-9_-]+)(?![A-Za-z0-9_-])"
       },
-      "examples": [
-        "^CAGEERF >>analyze",
-        "^ReACT >>debug",
-        "@CAGEERF >>analyze"
-      ],
+      "examples": ["^CAGEERF >>analyze", "^ReACT >>debug"],
       "status": "implemented",
       "detectInHooks": true
     },

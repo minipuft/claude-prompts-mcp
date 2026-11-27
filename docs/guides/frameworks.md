@@ -100,9 +100,6 @@ prompt_engine(command: "^REACT >>my_prompt")
 `^<id>` is left as literal text. A word that names no framework is also left as literal text, which
 is what keeps a caret in ordinary command text, such as `^2`, from being read as an operator.
 
-`@<id>` is the deprecated spelling of the same operator. It still works and the reply says to use
-`^`. Claude Code, Codex and Cursor read `@` as a file or mention sigil, which is why `^` replaced it.
-
 The override needs no system toggle: with the framework system disabled
 (`system_control(action:"framework", operation:"disable")`), `^REACT` still applies to every step
 the run renders, including a step a `remainder` or a blocking unknown adds mid-run.

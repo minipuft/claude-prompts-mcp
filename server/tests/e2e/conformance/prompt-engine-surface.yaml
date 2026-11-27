@@ -5,21 +5,21 @@
 # advertises that does not work produces a failed tool call on a real user's first attempt —
 # which is exactly the %guided defect, one layer up.
 #
-# Claims covered here: @framework selection, gate presets (:fast/:full/:extended), named
+# Claims covered here: ^framework selection, gate presets (:fast/:full/:extended), named
 # arguments, and the resource:// read surface.
 
 version: 1
 
 scenarios:
-  # ── @framework selection (six ids under resources/frameworks/) ────────────────
+  # ── ^framework selection (six ids under resources/frameworks/) ────────────────
   - id: framework-cageerf
-    claim_source: 'prompt_engine tool description — "@CAGEERF >>prompt" applies a framework'
-    requests: [{ tool: prompt_engine, args: { command: '@CAGEERF >>minimal_prompt' } }]
+    claim_source: 'prompt_engine tool description — "^CAGEERF >>prompt" applies a framework'
+    requests: [{ tool: prompt_engine, args: { command: '^CAGEERF >>minimal_prompt' } }]
     expect: { ok: true }
 
   - id: framework-react
     claim_source: 'resources/frameworks/ declares "react" — FrameworkManager is the authority'
-    requests: [{ tool: prompt_engine, args: { command: '@ReAct >>minimal_prompt' } }]
+    requests: [{ tool: prompt_engine, args: { command: '^ReAct >>minimal_prompt' } }]
     expect: { ok: true }
 
   - id: framework-unknown-rejects
@@ -29,9 +29,9 @@ scenarios:
     # `text` is supplied so the ONLY remaining reason to reject is the unknown framework id.
     # Without it this row still went green — but via the fixture's own argument validation, which
     # would have kept passing even if unknown frameworks were silently accepted.
-    requests: [{ tool: prompt_engine, args: { command: '@NotARealFramework >>minimal_prompt' } }]
+    requests: [{ tool: prompt_engine, args: { command: '^NotARealFramework >>minimal_prompt' } }]
     # Pins the offending command, so a parse failure for any OTHER reason cannot satisfy it.
-    expect: { error_contains: 'Parse error: "@NotARealFramework >>minimal_prompt"' }
+    expect: { error_contains: 'Parse error: "^NotARealFramework >>minimal_prompt"' }
 
   # ── Named arguments ────────────────────────────────────────────────────────
   # The ONE row that keeps `reference_demo`: its claim IS argument passing, so it needs a fixture

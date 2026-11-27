@@ -63,18 +63,6 @@ export interface PipelineInternalState {
     selectedStyleGuidance?: string;
     /** Results from prompt guidance service, keyed by prompt ID */
     guidanceResults?: Record<string, unknown>;
-    /**
-     * The one advisory line owed to a command that spelled the framework operator with a
-     * deprecated sigil (`@ReACT`, where `^ReACT` is canonical). Never a refusal: the command ran.
-     *
-     * Writer: `OperatorValidationStage`, once the operator validated. Reader: `ResponseAssembler`,
-     * which renders it in the reply. A separate field because the other reply-bearing bucket,
-     * `gates.advisoryWarnings`, renders under an "Advisory Gate Warnings" header, and
-     * `context.diagnostics` reaches the logger only.
-     *
-     * Assigned whole rather than mutated, per the pipeline-state rule.
-     */
-    operatorSpellingNote?: string;
   };
 
   /**

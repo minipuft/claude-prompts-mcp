@@ -1,5 +1,5 @@
 // @lifecycle canonical - Parses symbolic command expressions into operators.
-import { FRAMEWORK_SIGIL_CLASS, OPERATOR_PATTERNS } from './operator-patterns.js';
+import { FRAMEWORK_SIGIL_SOURCE, OPERATOR_PATTERNS } from './operator-patterns.js';
 import {
   stripStyleOperators,
   findFrameworkOperatorOutsideQuotes,
@@ -111,18 +111,21 @@ export function rejectQuoteInGateText(command: string): void {
 /**
  * `::` followed by an empty quoted text, optionally named (`:: ""`, `:: ''`, `:: id:""`). The gate
  * grammar's quoted text is `[^"']+`, so this is never a gate token: it was left in the args and the
- * prompt ran without the gate. `=` is not matched: `key = ""` is an argument (see
- * `extractInlineGateTokens`).
+ * prompt ran without the gate.
  */
 const EMPTY_QUOTED_GATE_TEXT = /\s::\s*(?:([a-z][a-z0-9_-]*):)?(["'])\2(?=\s|$)/gi;
 
 /**
- * A framework operator opening a chain step (`^ReACT >>b`, or the deprecated `@ReACT`). Operators
- * apply to the whole execution, so a step's own copy is dropped before its prompt id is read. The
- * sigils come from the registry: this strip once named only `@`, which threw `Invalid chain step
- * format` on a `^` step while the same command spelled with `@` parsed.
+ * A framework operator opening a chain step (`^ReACT >>b`). Operators apply to the whole
+ * execution, so a step's own copy is dropped before its prompt id is read. The sigil comes from
+ * the registry.
  */
-const LEADING_FRAMEWORK_OPERATOR = new RegExp(`^${FRAMEWORK_SIGIL_CLASS}[A-Za-z0-9_-]+\\s+`);
+const LEADING_FRAMEWORK_OPERATOR = new RegExp(`^${FRAMEWORK_SIGIL_SOURCE}[A-Za-z0-9_-]+\\s+`);
+
+/** A framework operator opening a parallel command, after an optional `>>` (`^ReACT >>p1 + >>p2`). */
+const LEADING_PARALLEL_FRAMEWORK_OPERATOR = new RegExp(
+  `^(?:>>)?\\s*${FRAMEWORK_SIGIL_SOURCE}[A-Za-z0-9_-]+\\s+`
+);
 
 /**
  * Refuse a `::` gate whose quoted text is empty, with stage 05's `gate-criteria-invalid` reason
@@ -165,9 +168,8 @@ function advanceQuoteState(
 export class SymbolicCommandParser {
   private readonly logger: Logger;
   /**
-   * Validates `^framework` operators (and the deprecated `@framework` spelling): an id the lookup
-   * rejects is left as literal text. Absent means no framework knowledge, and every `^word` or
-   * `@word` is treated as a framework operator.
+   * Validates `^framework` operators: an id the lookup rejects is left as literal text. Absent
+   * means no framework knowledge, and every `^word` is treated as a framework operator.
    */
   private readonly isRegisteredFramework: FrameworkIdLookup | undefined;
 
@@ -190,8 +192,7 @@ export class SymbolicCommandParser {
   /**
    * @param logger - Logger instance
    * @param isRegisteredFramework - Optional lookup, asked on every parse. When provided, only
-   *   ^framework operators (and the deprecated @framework spelling) it accepts are detected; any
-   *   other ^word or @word stays literal text.
+   *   ^framework operators it accepts are detected; any other ^word stays literal text.
    */
   constructor(logger: Logger, isRegisteredFramework?: FrameworkIdLookup) {
     this.logger = logger;
@@ -389,26 +390,25 @@ export class SymbolicCommandParser {
       command = expandedCommand;
     }
 
-    // Use quote-aware framework detection to avoid matching ^word / @word inside quoted strings
+    // Use quote-aware framework detection to avoid matching ^word inside quoted strings
     const frameworkResult = findFrameworkOperatorOutsideQuotes(command);
     if (frameworkResult) {
       const normalizedId = frameworkResult.frameworkId.toUpperCase();
 
-      // Only treat as framework operator if it's a registered framework
-      // This allows @docs/, @mention, etc. to pass through as literal text
+      // Only treat as framework operator if it's a registered framework, so a ^word that names
+      // none passes through as literal text
       if (this.isRegisteredFramework === undefined || this.isRegisteredFramework(normalizedId)) {
         operatorTypes.push('framework');
         operators.push({
           type: 'framework',
           frameworkId: frameworkResult.frameworkId,
-          sigil: frameworkResult.sigil,
           normalizedId,
           temporary: true,
           scopeType: 'execution',
         });
       } else {
         this.logger.debug(
-          `[detectOperators] Skipping unregistered framework operator: ${frameworkResult.sigil}${frameworkResult.frameworkId}`
+          `[detectOperators] Skipping unregistered framework operator: ${frameworkResult.fullMatch.trim()}`
         );
       }
     }
@@ -451,15 +451,10 @@ export class SymbolicCommandParser {
       const anonymousCriteria: string[] = [];
 
       for (const match of gateMatches) {
-        const operatorToken = match[1];
         const namedColonId = match[2];
         const namedColonText = match[3];
         const anonQuoted = match[4];
         const canonicalOrUnquoted = match[5];
-
-        if (operatorToken === '=') {
-          this.logger.warn('[SymbolicParser] Gate operator "=" is deprecated. Use "::" instead.');
-        }
 
         // Named gate with colon syntax: :: id:"criteria"
         if (namedColonId && namedColonText) {
@@ -577,10 +572,7 @@ export class SymbolicCommandParser {
         : command.slice(0, framework.position) +
           command.slice(framework.position + framework.fullMatch.length);
     cleanCommand = stripStyleOperators(cleanCommand);
-    // NOTE: Only `::`-form gate tokens are stripped, and only per-segment (see
-    // extractInlineGateTokens below). The deprecated `=` form is deliberately left in the
-    // segment text — it is indistinguishable from a regular argument like input = "value",
-    // which is why gate stripping was historically skipped here entirely.
+    // Gate tokens are stripped per segment (see extractInlineGateTokens below).
 
     this.logger.debug(`[parseChainOperator] Original command: ${command}`);
     this.logger.debug(`[parseChainOperator] Clean command: ${cleanCommand}`);
@@ -647,8 +639,7 @@ export class SymbolicCommandParser {
 
   /**
    * Clean operators from a chain step string before validation.
-   * Strips %modifiers and framework operators (`^framework`, or the deprecated `@framework`)
-   * that may appear on individual steps.
+   * Strips %modifiers and framework operators (`^framework`) that may appear on individual steps.
    * This allows syntax like: %judge ^CAGEERF >>step1 --> %lean ^ReACT >>step2
    * Note: Operators apply at execution-level, not per-step. This method only
    * removes them for parsing validation purposes.
@@ -659,7 +650,7 @@ export class SymbolicCommandParser {
     // Strip modifier prefix (e.g., %clean, %judge, %lean, %framework)
     cleaned = cleaned.replace(/^%\s*[a-zA-Z_-]+\s*/, '');
 
-    // Strip framework operator prefix (e.g., ^CAGEERF, ^ReACT; sigils from the registry)
+    // Strip framework operator prefix (e.g., ^CAGEERF, ^ReACT; sigil from the registry)
     cleaned = cleaned.replace(LEADING_FRAMEWORK_OPERATOR, '');
 
     // Strip inline style selector (e.g., #style(analytical))
@@ -701,9 +692,6 @@ export class SymbolicCommandParser {
    * them; named forms (`:: id:"criteria"`, including `verify:`) are stripped only —
    * named-gate registration stays on the existing global namedInlineGates path.
    *
-   * Deliberately matches ONLY the `::` operator token. The deprecated `=` form is left
-   * untouched because it is indistinguishable from a regular `key = "value"` argument —
-   * the reason gate stripping was historically skipped in parseChainOperator entirely.
    * Quote-aware: tokens inside quoted argument values are never matched.
    */
   private extractInlineGateTokens(
@@ -715,9 +703,6 @@ export class SymbolicCommandParser {
 
     for (const match of segment.matchAll(this.OPERATOR_REGEX.gate)) {
       const index = match.index;
-      if (match[1] !== '::') {
-        continue; // never touch the deprecated `=` form
-      }
       if (isPositionInsideQuotes(segment, index)) {
         continue;
       }
@@ -807,8 +792,8 @@ export class SymbolicCommandParser {
   }
 
   private parseParallelOperator(command: string): ParallelOperator {
-    // Strip framework operator if present (e.g., "@cageerf >>p1 + >>p2" → ">>p1 + >>p2")
-    const cleanCommand = command.replace(/^(?:>>)?\s*@[A-Za-z0-9_-]+\s+/, '');
+    // Strip framework operator if present (e.g., "^cageerf >>p1 + >>p2" → ">>p1 + >>p2")
+    const cleanCommand = command.replace(LEADING_PARALLEL_FRAMEWORK_OPERATOR, '');
 
     const promptStrings = cleanCommand
       .split('+')

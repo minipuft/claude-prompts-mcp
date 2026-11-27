@@ -208,3 +208,18 @@ scenarios:
         },
       ]
     expect: { ok: true }
+
+  # ── The `=` gate operator is refused naming `::` (retirements.json) ─────────
+  - id: operator-gate-equals-refused
+    claim_source: 'retirements.json command-gate-equals-operator — refused with the :: spelling'
+    requests: [{ tool: prompt_engine, args: { command: ">>minimal_prompt = 'cite sources'" } }]
+    expect:
+      {
+        error_contains: 'Use the `::` gate operator (`>>prompt :: "criteria"`): `:: ''cite sources''`.',
+      }
+
+  # The exclusion that keeps the refusal above from eating argument values.
+  - id: operator-equals-in-argument-is-text
+    claim_source: 'retired-operators.ts — only " = <criterion>" is the gate spelling; key=value is text'
+    requests: [{ tool: prompt_engine, args: { command: '>>minimal_prompt text=hello' } }]
+    expect: { ok: true }

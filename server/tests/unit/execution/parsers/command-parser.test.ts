@@ -61,7 +61,7 @@ describe('UnifiedCommandParser symbolic behavior', () => {
   });
 
   test('parses framework prefixes without failing', async () => {
-    const result = await parser.parseCommand('@cageerf >>analyze', basePrompts);
+    const result = await parser.parseCommand('^cageerf >>analyze', basePrompts);
 
     expect(result.promptId).toBe('analyze');
     const frameworkOperator = result.operators?.operators.find((op) => op.type === 'framework');
@@ -174,7 +174,7 @@ describe('UnifiedCommandParser bare prompt name support', () => {
   });
 
   test('routes framework operator commands to symbolic strategy', async () => {
-    const result = await parser.parseCommand('@CAGEERF analyze', basePrompts);
+    const result = await parser.parseCommand('^CAGEERF analyze', basePrompts);
 
     expect(result.operators?.operators.some((op) => op.type === 'framework')).toBe(true);
   });
@@ -585,7 +585,7 @@ describe('P6.206: the JSON command form is parsed through the same refusals', ()
 /**
  * P6.218 / R112. MEASURED 2026-09-28 on `1f54e885` through `parseCommand`: the JSON form parsed
  * its inner command with the symbolic strategy and returned `operators` and `executionPlan`
- * undefined for `:: "X-218"`, `@ReACT` and an arrow-chain. It now carries the inner parse's
+ * undefined for `:: "X-218"`, `^ReACT` and an arrow-chain. It now carries the inner parse's
  * operators and plan whole, so stage 04 builds the same command from either spelling.
  */
 describe('P6.218: the JSON command form carries its inner command operators', () => {
@@ -594,7 +594,7 @@ describe('P6.218: the JSON command form carries its inner command operators', ()
     JSON.stringify({ command, ...extra });
 
   test('(a)(b) operators and plan equal the symbolic form, for a criterion, a framework and a chain', async () => {
-    for (const inner of ['>>analyze :: "X-218"', '@ReACT >>analyze', '>>analyze --> >>summarize']) {
+    for (const inner of ['>>analyze :: "X-218"', '^ReACT >>analyze', '>>analyze --> >>summarize']) {
       const symbolic = await parser.parseCommand(inner, basePrompts);
       const wrapped = await parser.parseCommand(json(inner), basePrompts);
       expect(symbolic.operators?.hasOperators).toBe(true);

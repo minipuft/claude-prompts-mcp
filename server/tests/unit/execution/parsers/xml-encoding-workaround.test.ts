@@ -80,7 +80,7 @@ describe('XML Encoding Workaround - Symbolic Operators Without >> Prefix', () =>
 
   describe('Framework Operator (@) makes >> prefix optional', () => {
     test('parses framework command without >> prefix', async () => {
-      const result = await parser.parseCommand('@CAGEERF test_prompt input="value"', mockPrompts);
+      const result = await parser.parseCommand('^CAGEERF test_prompt input="value"', mockPrompts);
 
       expect(result).toBeDefined();
       expect(result.promptId).toBe('test_prompt');
@@ -89,7 +89,7 @@ describe('XML Encoding Workaround - Symbolic Operators Without >> Prefix', () =>
     });
 
     test('also accepts framework command WITH >> prefix', async () => {
-      const result = await parser.parseCommand('@CAGEERF >>test_prompt input="value"', mockPrompts);
+      const result = await parser.parseCommand('^CAGEERF >>test_prompt input="value"', mockPrompts);
 
       expect(result).toBeDefined();
       expect(result.promptId).toBe('test_prompt');
@@ -122,7 +122,7 @@ describe('XML Encoding Workaround - Symbolic Operators Without >> Prefix', () =>
 
   describe('Combined Operators work without >> prefix', () => {
     test('framework + chain operators', async () => {
-      const result = await parser.parseCommand('@CAGEERF test_prompt --> test_simple', mockPrompts);
+      const result = await parser.parseCommand('^CAGEERF test_prompt --> test_simple', mockPrompts);
 
       expect(result).toBeDefined();
       expect(result.promptId).toBe('test_prompt');

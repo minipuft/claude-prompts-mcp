@@ -152,12 +152,6 @@ class TestChainSyntaxDetection:
             "implement",
         ]
 
-    def test_framework_prefix_with_chain(self):
-        assert detect_chain_syntax('@CAGEERF >>step1 scope:"x" --> >>step2') == [
-            "step1",
-            "step2",
-        ]
-
     def test_case_normalization(self):
         assert detect_chain_syntax(">>Analyze --> >>IMPLEMENT") == ["analyze", "implement"]
 
@@ -180,22 +174,23 @@ class TestDelegationDetection:
         matches = detect_operator(">>a --> >>b ==> >>c", "delegation")
         assert len(matches) > 0
 
-    def test_delegation_is_not_a_deprecated_equals_gate(self):
+    def test_delegation_is_not_a_gate(self):
         """`==>` once matched the gate pattern as `=` plus the criterion `=>`."""
         assert detect_operator(">>step1 ==> >>step2", "gate") == []
-        assert detect_operator('>>step1 ==> >>step2 = "cite sources"', "gate") == [
-            "=",
-            "cite sources",
-        ]
+
+    def test_equals_is_not_a_gate_operator(self):
+        """`::` is the gate operator; the server refuses `=`, so the hook never reports it as a gate."""
+        assert detect_operator('>>step1 ==> >>step2 = "cite sources"', "gate") == []
+        assert detect_operator('>>step1 ==> >>step2 :: "cite sources"', "gate") == ["::", "cite sources"]
 
 
 # ── Framework/Style Detection Tests ──
 
 
 class TestFrameworkDetection:
-    def test_detects_framework(self):
-        matches = detect_operator("@CAGEERF >>analyze", "framework")
-        assert "CAGEERF" in matches
+    def test_at_sigil_is_not_a_framework_operator(self):
+        """`^` is the framework operator; the server refuses `@NAME`, so the hook never reports it."""
+        assert detect_operator("@CAGEERF >>analyze", "framework") == []
 
     def test_detects_framework_caret(self):
         matches = detect_operator("^CAGEERF >>analyze", "framework")
@@ -207,10 +202,7 @@ class TestFrameworkDetection:
 
     def test_framework_not_in_quotes(self):
         """Framework inside quotes should not match (quote-aware pattern)."""
-        matches = detect_operator('>>analyze scope:"@CAGEERF"', "framework")
-        # The pattern (?:^|\s)@ requires whitespace before @, so quoted @ may or may not match
-        # depending on surrounding context — this test documents current behavior
-        assert isinstance(matches, list)
+        assert detect_operator('>>analyze scope:" ^CAGEERF"', "framework") == []
 
 
 class TestStyleDetection:
@@ -234,11 +226,16 @@ class TestStyleDetection:
 
 class TestDetectAllOperators:
     def test_complex_command(self):
-        result = detect_all_operators('@CAGEERF >>step1 --> >>step2 ==> >>step3 :: "validate"')
+        result = detect_all_operators('^CAGEERF >>step1 --> >>step2 ==> >>step3 :: "validate"')
         assert "chain" in result
         assert "delegation" in result
         assert "framework" in result
         assert "gate" in result
+
+    def test_complex_command_at_sigil_reports_no_framework(self):
+        result = detect_all_operators('@CAGEERF >>step1 --> >>step2 ==> >>step3 :: "validate"')
+        assert "framework" not in result
+        assert "chain" in result
 
     def test_complex_command_caret_framework(self):
         result = detect_all_operators('^CAGEERF >>step1 --> >>step2 ==> >>step3 :: "validate"')

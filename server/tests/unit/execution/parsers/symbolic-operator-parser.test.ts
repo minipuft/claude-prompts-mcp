@@ -38,27 +38,17 @@ describe('SymbolicCommandParser', () => {
     }
   });
 
-  test('detectOperators parses gate operators and emits deprecation warnings for "="', () => {
-    const result = parser.detectOperators('>>prompt = "legacy criteria"');
+  test('detectOperators reads " = " as argument text, never as a gate operator', () => {
+    // `::` is the gate operator; the `=` spelling is refused before detection runs
+    // (`retired-operators.test.ts`), so here it is no operator at all.
+    const result = parser.detectOperators('>>prompt = "criteria"');
 
-    expect(result.operatorTypes).toContain('gate');
-    const gateOp = result.operators.find((op) => op.type === 'gate');
-    expect(gateOp?.type).toBe('gate');
-    if (gateOp?.type === 'gate') {
-      expect(gateOp.criteria).toBe('legacy criteria');
-      expect(gateOp.parsedCriteria).toEqual(['legacy criteria']);
-      expect(gateOp.scope).toBe('execution');
-      expect(gateOp.retryOnFailure).toBe(true);
-      expect(gateOp.maxRetries).toBe(1);
-    }
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Gate operator "=" is deprecated')
-    );
+    expect(result.operators.filter((op) => op.type === 'gate')).toEqual([]);
   });
 
-  test('detectOperators reads "==>" as delegation only, never as a deprecated "=" gate', () => {
-    // The deprecated `=` gate's unquoted form matched ` ==> ` as `=` plus the criterion `=>`, so
-    // every delegated chain carried a junk inline gate and %clean refused it as a requested gate.
+  test('detectOperators reads "==>" as delegation only, never as a gate', () => {
+    // The `=` gate's unquoted form once matched ` ==> ` as `=` plus the criterion `=>`, so every
+    // delegated chain carried a junk inline gate and %clean refused it as a requested gate.
     const result = parser.detectOperators('>>minimal_prompt ==> >>minimal_prompt');
 
     expect(result.operatorTypes).toEqual(['chain']);
@@ -67,24 +57,18 @@ describe('SymbolicCommandParser', () => {
     if (chainOp?.type === 'chain') {
       expect(chainOp.steps.map((step) => step.delegated === true)).toEqual([false, true]);
     }
-    expect(logger.warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('Gate operator "=" is deprecated')
-    );
   });
 
-  test('detectOperators keeps a "::" gate on a delegated step and its deprecated "=" twin', () => {
-    const canonical = parser.detectOperators('>>a ==> >>b :: "cite sources"');
-    const legacy = parser.detectOperators('>>a ==> >>b = "cite sources"');
+  test('detectOperators keeps a "::" gate on a delegated step', () => {
+    const result = parser.detectOperators('>>a ==> >>b :: "cite sources"');
 
-    for (const result of [canonical, legacy]) {
-      const gates = result.operators.filter((op) => op.type === 'gate');
-      expect(gates).toHaveLength(1);
-      expect(gates[0]?.type === 'gate' ? gates[0].criteria : undefined).toBe('cite sources');
-    }
+    const gates = result.operators.filter((op) => op.type === 'gate');
+    expect(gates).toHaveLength(1);
+    expect(gates[0]?.type === 'gate' ? gates[0].criteria : undefined).toBe('cite sources');
   });
 
   test('detectOperators captures framework overrides and normalizes identifiers', () => {
-    const result = parser.detectOperators('@ReACT >>debug_issue');
+    const result = parser.detectOperators('^ReACT >>debug_issue');
 
     expect(result.operatorTypes).toContain('framework');
     const frameworkOp = result.operators.find((op) => op.type === 'framework');
@@ -261,7 +245,7 @@ describe('SymbolicCommandParser', () => {
     });
 
     test('handles mixed >> prefixes with framework operator', () => {
-      const command = '@react >>p1 --> >>p2';
+      const command = '^react >>p1 --> >>p2';
       const result = parser.detectOperators(command);
 
       expect(result.operatorTypes).toContain('framework');
@@ -283,7 +267,7 @@ describe('SymbolicCommandParser', () => {
     });
 
     test('handles mixed operators with multiple >> prefixes and gate', () => {
-      const command = '@cageerf >>p1 + >>p2 :: "quality-gate"';
+      const command = '^cageerf >>p1 + >>p2 :: "quality-gate"';
       const result = parser.detectOperators(command);
 
       expect(result.operatorTypes).toContain('framework');
@@ -326,7 +310,7 @@ describe('SymbolicCommandParser', () => {
 
   describe('Chain operator with modifiers and framework operators', () => {
     test('parses chain with framework operator at start', () => {
-      const command = '@CAGEERF >>step1 input:"test" --> >>step2';
+      const command = '^CAGEERF >>step1 input:"test" --> >>step2';
       const result = parser.detectOperators(command);
 
       expect(result.hasOperators).toBe(true);
@@ -351,7 +335,7 @@ describe('SymbolicCommandParser', () => {
     });
 
     test('parses chain with operators on later steps (syntax tolerance)', () => {
-      const command = '>>step1 --> %lean @ReACT >>step2 input:"value"';
+      const command = '>>step1 --> %lean ^ReACT >>step2 input:"value"';
       const result = parser.detectOperators(command);
 
       expect(result.hasOperators).toBe(true);
@@ -368,7 +352,7 @@ describe('SymbolicCommandParser', () => {
     });
 
     test('parses chain with operators on each step (syntax tolerance)', () => {
-      const command = '@CAGEERF >>step1 input:"test" --> @ReACT >>step2 --> @5W1H >>step3';
+      const command = '^CAGEERF >>step1 input:"test" --> ^ReACT >>step2 --> ^5W1H >>step3';
       const result = parser.detectOperators(command);
 
       expect(result.hasOperators).toBe(true);
@@ -395,7 +379,7 @@ describe('SymbolicCommandParser', () => {
     });
 
     test('parses chain with only framework operators on steps', () => {
-      const command = '@CAGEERF >>step1 --> @ReACT >>step2';
+      const command = '^CAGEERF >>step1 --> ^ReACT >>step2';
       const result = parser.detectOperators(command);
 
       expect(result.hasOperators).toBe(true);
@@ -580,7 +564,7 @@ describe('qualified quoted operator names', () => {
     error: jest.fn(),
   } as unknown as Logger);
   test.each(["'", '"'])('quoted framework/style/gate names remain literal %s', (quote) => {
-    const tail = `input:${quote}prefix @ReACT #analytical :: quality *2${quote}`;
+    const tail = `input:${quote}prefix ^ReACT #analytical :: quality *2${quote}`;
     const result = parser.detectOperators(`>>parent/child ${tail} --> >>parent/child/deep`);
     expect(result.operatorTypes).toEqual(['chain']);
     const chain = result.operators.find((op) => op.type === 'chain');

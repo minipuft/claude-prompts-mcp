@@ -167,7 +167,7 @@ describe('PromptGuidanceStage', () => {
 
   describe('System prompt duplication prevention', () => {
     test('skips system prompt injection when the system message already applies a framework', async () => {
-      const context = new PromptRequestContext({ command: '@CAGEERF >>demo' });
+      const context = new PromptRequestContext({ command: '^CAGEERF >>demo' });
       const convertedPrompt = createConvertedPrompt({
         systemMessage: 'Apply the C.A.G.E.E.R.F framework systematically, as authored.',
       });
@@ -220,7 +220,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('prevents duplication for a chain step whose system message already applies a framework', async () => {
-      const context = new PromptRequestContext({ command: '@ReACT >>chain' });
+      const context = new PromptRequestContext({ command: '^ReACT >>chain' });
       context.executionPlan = createExecutionPlan({
         strategy: 'chain',
         requiresSession: true,
@@ -263,7 +263,7 @@ describe('PromptGuidanceStage', () => {
     });
 
     test('passes framework override from @operator to prompt guidance service', async () => {
-      const context = new PromptRequestContext({ command: '@SCAMPER >>demo' });
+      const context = new PromptRequestContext({ command: '^SCAMPER >>demo' });
       const convertedPrompt = createConvertedPrompt();
       context.executionPlan = createExecutionPlan({
         frameworkOverride: 'SCAMPER',

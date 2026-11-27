@@ -149,7 +149,7 @@ describe('Repetition Operator (* N)', () => {
     });
 
     test('repetition with framework operator', () => {
-      const result = parser.detectOperators('@CAGEERF >>brainstorm * 2');
+      const result = parser.detectOperators('^CAGEERF >>brainstorm * 2');
 
       expect(result.operatorTypes).toContain('framework');
       expect(result.operatorTypes).toContain('repetition');
@@ -219,7 +219,7 @@ describe('Repetition Operator (* N)', () => {
     });
 
     test('sets framework override from combined operators', () => {
-      const detection = parser.detectOperators('@ReACT >>debug * 2');
+      const detection = parser.detectOperators('^ReACT >>debug * 2');
       const plan = parser.generateExecutionPlan(detection, 'debug', '');
 
       expect(plan.frameworkOverride).toBe('REACT');

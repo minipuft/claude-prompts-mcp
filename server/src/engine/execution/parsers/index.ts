@@ -44,9 +44,6 @@ export {
   type WorkflowCommandResult,
 } from './workflow-command-builder.js';
 
-// Backward compatibility wrapper removed - migration completed
-// Legacy parsing methods are preserved through deprecated redirects in consolidated-prompt-engine.ts
-
 // Re-export for convenience
 export type { PromptData } from '#shared/types/index.js';
 export type { PromptArgument } from '#shared/types/index.js';
@@ -77,10 +74,9 @@ export interface ParsingSystem {
  * - Argument processor with validation and type coercion
  *
  * @param logger Logger instance for system-wide logging
- * @param isRegisteredFramework Optional lookup for quote-aware ^framework detection (and the
- *   deprecated @framework spelling), asked on every parse. When provided, only framework operators
- *   it accepts are detected, and other ^word or @word patterns (like @docs/, @mention) stay
- *   literal text.
+ * @param isRegisteredFramework Optional lookup for quote-aware ^framework detection, asked on
+ *   every parse. When provided, only framework operators it accepts are detected (any other ^word
+ *   stays literal text), and an @framework spelling of an id it accepts is refused.
  * @returns Complete parsing system ready for use
  */
 export function createParsingSystem(

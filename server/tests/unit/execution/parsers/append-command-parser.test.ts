@@ -63,7 +63,7 @@ describe('parseAppendCommand', () => {
 
   test.each(['"', "'"])('preserves slash and named operator bytes inside %s quotes', (quote) => {
     const value =
-      '/parent/child --> >>other ==> >>delegated :: gate @CAGEERF #analytical %clean %judge + >>extra ? true : >>else *3';
+      '/parent/child --> >>other ==> >>delegated :: gate ^CAGEERF #analytical %clean %judge + >>extra ? true : >>else *3';
     expect(
       parseAppendCommand(`--> >>parent/child note=${quote}${value}${quote} --> >>root`)
     ).toEqual({

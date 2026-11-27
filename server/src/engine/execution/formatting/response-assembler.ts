@@ -152,10 +152,7 @@ export class ResponseAssembler {
       sections.push(context.gateInstructions);
     }
 
-    sections.push(
-      ...this.buildAdvisoryWarnings(context),
-      ...this.buildOperatorSpellingNote(context)
-    );
+    sections.push(...this.buildAdvisoryWarnings(context));
 
     // Gate review CTA (only when gate content active) or final completion
     const gateReviewCTA = gateActive ? this.buildGateReviewCTA(context) : null;
@@ -222,10 +219,7 @@ export class ResponseAssembler {
       sections.push(context.gateInstructions);
     }
 
-    sections.push(
-      ...this.buildAdvisoryWarnings(context),
-      ...this.buildOperatorSpellingNote(context)
-    );
+    sections.push(...this.buildAdvisoryWarnings(context));
 
     // Declared section headers (Tier 2.5, OQ-1) — same block the chain path renders via
     // buildResponseFormatSection. A gated single prompt (explicit `gates`, a `gate` operator, or
@@ -1320,15 +1314,6 @@ export class ResponseAssembler {
     return warnings.length === 0
       ? []
       : ['\n---\n**Advisory Gate Warnings:**', ...warnings.map((warning) => `- ${warning}`)];
-  }
-
-  /**
-   * The advisory line for a framework operator typed with a deprecated sigil. It reports the
-   * command itself, not a gate, so it renders whether or not gate content is suppressed.
-   */
-  private buildOperatorSpellingNote(context: PromptRequestContext): string[] {
-    const note = context.state.framework.operatorSpellingNote;
-    return note === undefined ? [] : [note];
   }
 
   /**

@@ -264,7 +264,7 @@ function writeWorkspace(workspace: string): void {
   // own gate definitions through registration and the run's gate remap.
   writeFileSync(
     path.join(workspace, 'config.json'),
-    JSON.stringify({ gates: { executeInlineGateDefinitions: true } })
+    JSON.stringify({ version: 5, gates: { executeInlineGateDefinitions: true } })
   );
 }
 
@@ -1144,13 +1144,13 @@ describe('prompt_engine over the pipeline the composition root builds', () => {
     expect(advanced.text).toContain('Progress 2/2');
   });
 
-  test('a single prompt renders under the active framework, and `@react` overrides it', async () => {
+  test('a single prompt renders under the active framework, and `^react` overrides it', async () => {
     const single = await promptEngine({ command: '>>cr_a' });
     expect(single.isError).toBe(false);
     expect(single.text).toContain('You are operating under the C.A.G.E.E.R.F Framework for cr_a.');
     expect(single.text).toContain('BODY-cr_a');
 
-    const overridden = await promptEngine({ command: '@react >>cr_a' });
+    const overridden = await promptEngine({ command: '^react >>cr_a' });
     expect(overridden.isError).toBe(false);
     expect(overridden.text).toContain('You are operating under the ReACT Framework for cr_a.');
     expect(overridden.text).not.toContain('C.A.G.E.E.R.F');
@@ -1605,12 +1605,12 @@ describe('a chain step renders the framework guidance of the framework it runs u
     expectOneBlock(second, 'C.A.G.E.E.R.F@fws_b');
   });
 
-  test('control: an `@react` override renders ReACT on every step, the declared one included', async () => {
-    const [first, second] = await runBothSteps('@react >>fws_plain', 'fws_plain');
+  test('control: an `^react` override renders ReACT on every step, the declared one included', async () => {
+    const [first, second] = await runBothSteps('^react >>fws_plain', 'fws_plain');
     expectOneBlock(first, 'ReACT@fws_a');
     expectOneBlock(second, 'ReACT@fws_b');
 
-    const declared = await promptEngine({ command: '@react >>fws_declared' });
+    const declared = await promptEngine({ command: '^react >>fws_declared' });
     expectOneBlock(declared, 'ReACT@fws_a');
   });
 });
@@ -1630,7 +1630,7 @@ describe('a single prompt renders its framework guidance through one builder', (
   const count = (text: string, needle: string): number => text.split(needle).length - 1;
 
   test('guidance that names template placeholders renders them substituted, once', async () => {
-    const reply = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+    const reply = await promptEngine({ command: `^${FWS2_FRAMEWORK_ID} >>fws2_single` });
     expect(reply.isError).toBe(false);
     expect(count(reply.text, FWS2_GUIDANCE)).toBe(1);
     expect(reply.text).not.toContain('{PROMPT_NAME}');
@@ -1647,11 +1647,11 @@ describe('a single prompt renders its framework guidance through one builder', (
       .getFrameworkManager()
       ?.getFramework(FWS2_FRAMEWORK_ID);
     if (definition === undefined) throw new Error(`${FWS2_FRAMEWORK_ID} was never loaded`);
-    const withPlaceholder = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+    const withPlaceholder = await promptEngine({ command: `^${FWS2_FRAMEWORK_ID} >>fws2_single` });
     const original = definition.systemPromptTemplate;
     definition.systemPromptTemplate = 'FWS2-TEMPLATE-WITHOUT-PLACEHOLDER for {PROMPT_NAME}.';
     try {
-      const reply = await promptEngine({ command: `@${FWS2_FRAMEWORK_ID} >>fws2_single` });
+      const reply = await promptEngine({ command: `^${FWS2_FRAMEWORK_ID} >>fws2_single` });
       expect(reply.isError).toBe(false);
       expect(count(reply.text, 'FWS2-TEMPLATE-WITHOUT-PLACEHOLDER for fws2_single.')).toBe(1);
       expect(count(reply.text, FWS2_HEADING)).toBe(1);
@@ -1664,8 +1664,8 @@ describe('a single prompt renders its framework guidance through one builder', (
     }
   });
 
-  test('`@react` renders ReACT once; `%clean` renders none', async () => {
-    const react = await promptEngine({ command: '@react >>fws2_single' });
+  test('`^react` renders ReACT once; `%clean` renders none', async () => {
+    const react = await promptEngine({ command: '^react >>fws2_single' });
     expect(react.isError).toBe(false);
     expect(count(react.text, 'You are operating under the ReACT Framework for fws2_single.')).toBe(
       1
@@ -1681,7 +1681,7 @@ describe('a single prompt renders its framework guidance through one builder', (
   });
 
   test('a system message that already applies a framework is not given the block again', async () => {
-    const reply = await promptEngine({ command: '@react >>fws2_carries_react' });
+    const reply = await promptEngine({ command: '^react >>fws2_carries_react' });
     expect(reply.isError).toBe(false);
     expect(reply.text).toContain('BODY-fws2-carries');
     expect(count(reply.text, 'Apply the ReACT framework systematically')).toBe(1);

@@ -248,16 +248,15 @@ later segments take their arguments from the command text and the previous step'
 
 <!-- illustrative-prompts: step2 prompt brainstorm analyze summarize research compare validate synthesize p -->
 
-| Operator                     | Syntax         | Example                    | Purpose                                 |
-| ---------------------------- | -------------- | -------------------------- | --------------------------------------- |
-| Framework                    | `^NAME`        | `^CAGEERF prompt`          | Apply framework                         |
-| Framework (deprecated alias) | `@NAME`        | `@CAGEERF prompt`          | Still works; the reply says to use `^`  |
-| Chain                        | `-->`          | `step1 --> step2`          | Sequential execution                    |
-| Delegation                   | `==>`          | `step1 ==> step2`          | Hand off step to sub-agent              |
-| Repetition                   | `* N`          | `>>prompt * 3`             | Repeat with same args (chain shorthand) |
-| Gate (anon)                  | `:: "text"`    | `:: 'cite sources'`        | Anonymous quality criteria              |
-| Gate (named)                 | `:: id:"text"` | `:: security:"no secrets"` | Named gate with trackable ID            |
-| Style                        | `#id`          | `#analytical`              | Response formatting                     |
+| Operator     | Syntax         | Example                    | Purpose                                 |
+| ------------ | -------------- | -------------------------- | --------------------------------------- |
+| Framework    | `^NAME`        | `^CAGEERF prompt`          | Apply framework                         |
+| Chain        | `-->`          | `step1 --> step2`          | Sequential execution                    |
+| Delegation   | `==>`          | `step1 ==> step2`          | Hand off step to sub-agent              |
+| Repetition   | `* N`          | `>>prompt * 3`             | Repeat with same args (chain shorthand) |
+| Gate (anon)  | `:: "text"`    | `:: 'cite sources'`        | Anonymous quality criteria              |
+| Gate (named) | `:: id:"text"` | `:: security:"no secrets"` | Named gate with trackable ID            |
+| Style        | `#id`          | `#analytical`              | Response formatting                     |
 
 **A delegated step can be detached.** `==>` always blocks: the run waits at the step until the
 worker's result comes back as `user_response`. A chain step (YAML `chainSteps[]` or a `workflow`
@@ -1832,7 +1831,7 @@ restores the state before it. Its row in this list says `Version recorded: yes` 
 reason when the database refused the write. A file its loader refuses records no version and is
 listed with `Operation: refused` and the loader's reason; the previous definition keeps serving.
 
-**Which folders are tracked:** your primary prompts and gates folders, and every workspace overlay (`<workspace>/prompts`, `<workspace>/gates`) — including one created while the server runs. A resource that exists in more than one of them is recorded once, for the copy that is served, so editing a copy another folder overrides records nothing. The bundled catalog is tracked only when it is your primary folder (no workspace configured): it changes only when the package is updated.
+**Which folders are tracked:** your primary prompts and gates folders, and every overlay folder (each `paths.resources` entry and the project's `.claude-prompts/`) — including one created while the server runs. A resource that exists in more than one of them is recorded once, for the copy that is served, so editing a copy another folder overrides records nothing. The bundled catalog is tracked only when it is your primary folder (no workspace configured): it changes only when the package is updated.
 
 **Why this matters:** Debug sync issues between your editor and the server. Track which prompts changed during a session. Audit who modified what before a deploy.
 
