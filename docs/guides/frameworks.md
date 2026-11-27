@@ -45,7 +45,7 @@ frameworks at the same time — CAGEERF for a server codebase, SCAMPER for a des
 A framework that only one project needs belongs in that project's `.claude-prompts/` folder, where it
 loads for that project alone (see [Custom Resources](custom-resources.md#a-projects-own-resources)).
 
-Declare the starting point in that project's `config.jsonc` (`config.json` is also still read):
+Declare the starting point in that project's config file (`config.jsonc` or `config.json`):
 
 ```json
 {

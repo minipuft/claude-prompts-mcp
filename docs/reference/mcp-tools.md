@@ -47,7 +47,7 @@ resource_manager(resource_type:"framework", action:"switch", id:"cageerf")
 > **Off by default.** `resources.registerWithMcp` ships as `false`, because the tools cover the same
 > discovery more cheaply. Until you enable it, `resources/list` returns an empty list and every URI
 > below answers `Resource not found`. Turn it on with `cpm enable resources`, or set
-> `resources.registerWithMcp: true` in `config.jsonc` (`config.json` is also still read), then restart the server.
+> `resources.registerWithMcp: true` in your config file (`config.jsonc` or `config.json`), then restart the server.
 
 MCP Resources provide a **read-only, token-efficient** alternative to tool-based list/inspect operations. Use resources when you need to:
 
@@ -537,8 +537,8 @@ registered gate nor one the run already holds is refused before any gate registe
 `[gate-criteria-invalid]` line naming the entry by position (counted across `gates`, then
 `workflow.gates`) and its id or name, and the accepted forms. An entry whose id the run holds is
 that gate, so a resume may re-send `{id:"cites"}` alone. A run resumed in another server process
-re-registers the gates it recorded when it started and is never refused for them. Each of these
-used to start the run without the gate: skipped, or registered with nothing to review.
+re-registers the gates it recorded when it started and is never refused for them. None of these
+starts the run without the gate.
 
 **A full temporary gate registry releases idle runs, then refuses.** The server keeps up to 100
 temporary gates. At that limit it drops expired gates, then releases the gates of runs that have
@@ -650,7 +650,7 @@ structurally identical to an equivalent prompt-backed chain run, and node ids ar
 | **Edges are order**          | Edges are dependencies, linearized into one run order (ties broken by declaration order). There is no branching. With no edges the order is `nodes[]`.      |
 | **Caps narrow only**         | `maxNodes` (32), `maxFanOut` (8), `maxInsertions` (3) are enforced; a budget asking for more is rejected, never clamped. `declaredCostCeiling` is recorded. |
 | **Rejection writes nothing** | An invalid workflow returns one addressed line per problem and creates no run, no session, no version.                                                      |
-| **`gates` still works**      | A workflow's own `gates` and the `gates` parameter are concatenated, not exclusive.                                                                         |
+| **`gates` combine**          | A workflow's own `gates` and the `gates` parameter are concatenated, not exclusive.                                                                         |
 
 A rejection names its subject and its rule:
 
@@ -1054,8 +1054,7 @@ nothing.
 
 **Prompts only.** `unset` is a prompt parameter, and sending it with `resource_type:"gate"`,
 `"framework"` or `"category"` is refused by name before anything is written — removing a field
-from those resources is not implemented, and the call used to answer "updated successfully", spend
-a version, and change nothing. That refusal is not special to `unset`: every parameter the
+from those resources is not implemented. That refusal is not special to `unset`: every parameter the
 tool publishes names the resource types that read it, and sending one to a type that does not read
 it is refused rather than ignored.
 
@@ -1396,8 +1395,7 @@ acceptance. Semantic criteria declare `id`, `target`, `question`, `evidence_requ
 (boolean, category or anchored score), compatible `acceptance`, and optional `allow_not_applicable`
 (default false). A `step_output` target uses server capture. An `artifact` target with opaque `id`
 is a valid declaration, but runtime artifact capture is unavailable; it does not resolve a path.
-These modes use the canonical criterion fields;
-legacy output-regexp or minimum-length checks are not supported criterion types. See
+Any other criterion type or field is refused. See
 [Gate Definitions](../guides/gates.md) for execution controls and examples.
 
 Omitting `severity`, `enforcement_mode` or `block_response_on_fail` on an update leaves the gate's
@@ -1618,8 +1616,7 @@ state. A key `keys` does not list is refused, naming `keys` as the way to see wh
 `get` with no key is refused the same way.
 
 `set`, `reset`, and `restore` are not served here. Any other operation — or a request naming none
-at all — is refused by name rather than answered with a listing, which is what a malformed request
-used to fall back to. Change a value with `cpm config set <key> <value>` or reset with
+at all — is refused by name rather than answered with a listing. Change a value with `cpm config set <key> <value>` or reset with
 `cpm config reset --force`.
 
 This is not "configuration cannot be written over MCP": `system_control(action:"gates"|"framework",
@@ -2308,7 +2305,7 @@ array order is, because the order of `chain_steps` or `arguments` is part of the
 
 ### Configuration
 
-Enable/disable in `config.jsonc` (`config.json` is also still read):
+Enable/disable in your config file (`config.jsonc` or `config.json`):
 
 ```json
 {
@@ -2378,9 +2375,9 @@ action, so there is nothing to confirm.
 
 **A real `delete` purges the resource's version history with it**, for all four resource types, and
 the reply says how many rows it removed. Deleting a chain takes its steps' history too, since a step
-is recorded under the composite id `chain/step`. This is what `cpm delete` always did; over
-`resource_manager` the rows used to survive — unreachable by any action, because rollback resolves
-the resource first, and inherited by whatever was created under that id next. One caveat remains:
+is recorded under the composite id `chain/step`. `cpm delete` does the same. History left behind
+would be unreachable, because rollback resolves the resource first, and would be inherited by
+whatever is created under that id next. One caveat remains:
 rows `cpm` wrote are keyed by the tenant id the CLI resolved, which is not yet always the one the
 server resolves for the same workspace, so an MCP delete purges what the MCP surface wrote.
 
@@ -2472,9 +2469,8 @@ resources/gates/
 │   └── gate.yaml
 ```
 
-`state.db` is ephemeral and never committed. The per-resource JSON version sidecars this section
-previously described were removed when versioning moved to SQLite, and `.gitignore` still carries
-a rule for them so stragglers cannot be committed.
+`state.db` is ephemeral and never committed. Versions live there; `.gitignore` carries a rule for
+per-resource JSON version sidecars so a stray one cannot be committed.
 
 </details>
 
@@ -2502,9 +2498,8 @@ must name a readable config file, parsed strictly as JSON unless the path ends `
 case comments and a trailing comma are accepted; `--workspace` and `MCP_WORKSPACE`
 must name an existing directory; and a workspace config, when one exists, must
 be a readable JSON object. A workspace naming both `config.jsonc` and `config.json` also refuses to
-start, naming both paths — keep one. Each of these used to start a server on something else —
-ignored settings, a freshly created empty workspace, the bundled catalog in place of yours — with
-nothing reporting it. A workspace with no config file uses the packaged one, and an empty value
+start, naming both paths — keep one. None of these starts a server on something else — ignored
+settings, a freshly created empty workspace, the bundled catalog in place of yours. A workspace with no config file uses the packaged one, and an empty value
 counts as unset.
 
 There are no per-resource-type flags. `--prompts`, `--gates`, `--frameworks`, `--styles` and

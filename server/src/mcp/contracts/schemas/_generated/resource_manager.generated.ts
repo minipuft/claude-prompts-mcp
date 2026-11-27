@@ -486,7 +486,7 @@ export const resource_managerParameters: ToolParameter[] = [
     name: 'pass_criteria',
     type: 'array<object>',
     description:
-      '[Gate] Criterion objects. Legacy types: inline_guidance; framework_compliance with framework/min_compliance_score/severity/quality_indicators; shell_verify with shell_command (nonempty string array)/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var; script_tool with script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir. semantic_evaluation requires id,target,question,evidence_requirements:{min_items},result (boolean/category/anchored score),compatible acceptance; allow_not_applicable defaults false. Target step_output uses server capture; artifact with opaque id is authorable but runtime capture unavailable. Unknown keys and retired pattern/length criteria are refused.',
+      '[Gate] Criterion objects. Types: inline_guidance; framework_compliance with framework/min_compliance_score/severity/quality_indicators; shell_verify with shell_command (nonempty string array)/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var; script_tool with script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir. semantic_evaluation requires id,target,question,evidence_requirements:{min_items},result (boolean/category/anchored score),compatible acceptance; allow_not_applicable defaults false. Target step_output uses server capture; artifact with opaque id is authorable but runtime capture unavailable. Unknown keys and retired pattern/length criteria are refused.',
     status: 'working',
     includeInDescription: false,
   },

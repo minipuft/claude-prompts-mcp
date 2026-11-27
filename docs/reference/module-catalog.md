@@ -36,13 +36,13 @@ exports; near 1, it is a leaf that is cheap to change.
 | `mcp-metadata` | `src/mcp/metadata` | protocol | canonical | 0.50 | Builds MCP server and capability metadata. | `server/src/mcp/metadata/README.md` | — | mcp-contracts<br>shared-types<br>shared-utils | mcp-contracts<br>mcp-tools |
 | `mcp-tools` | `src/mcp/tools` | protocol | canonical | 0.97 | Registers and routes the three public MCP tools. | — | `index.ts` | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>mcp-contracts<br>mcp-metadata<br>prompts<br>resources<br>shared-core<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir | mcp-http<br>runtime |
 | `application-modules` | `src/modules` | layer | canonical | 0.56 | Feature modules that own prompt, chain, resource, and authoring behavior. | — | — | — | — |
-| `automation` | `src/modules/automation` | domain | canonical | 0.67 | Owns automation-oriented resource and workflow behavior. | — | — | engine-execution<br>hot-reload<br>shared-types<br>shared-utils | mcp-tools<br>prompts<br>resources<br>runtime |
+| `automation` | `src/modules/automation` | domain | canonical | 0.68 | Owns automation-oriented resource and workflow behavior. | — | — | engine-execution<br>hot-reload<br>shared-types<br>shared-utils | mcp-tools<br>prompts<br>resources<br>runtime |
 | `chains` | `src/modules/chains` | domain | canonical | 0.69 | Owns chain sessions, execution records, mutation, and persistence behavior. | — | — | engine-execution<br>shared-types<br>shared-utils<br>text-references | engine-execution<br>mcp-tools |
 | `formatting` | `src/modules/formatting` | domain | canonical | 0.47 | Owns response styles and output formatting behavior. | — | `index.ts` | shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>resources<br>runtime |
 | `hot-reload` | `src/modules/hot-reload` | domain | canonical | 0.50 | Coordinates file observation and registry refresh behavior. | — | — | shared-types<br>shared-utils | automation<br>prompts<br>runtime |
-| `prompts` | `src/modules/prompts` | domain | canonical | 0.62 | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>engine-gates<br>hot-reload<br>shared-types<br>shared-utils<br>text-references<br>workflow-ir | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime<br>versioning |
+| `prompts` | `src/modules/prompts` | domain | canonical | 0.61 | Owns prompt discovery, schema, registry, and lifecycle behavior. | — | `index.ts` | automation<br>engine-execution<br>engine-gates<br>hot-reload<br>shared-types<br>shared-utils<br>text-references<br>workflow-ir | cli-shared<br>mcp-http<br>mcp-tools<br>resources<br>runtime<br>versioning |
 | `resources` | `src/modules/resources` | domain | canonical | 0.62 | Owns resource verification and mutation transactions. | — | `index.ts` | automation<br>engine-frameworks<br>engine-gates<br>formatting<br>prompts<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime<br>skills-sync<br>versioning |
-| `skills-sync` | `src/modules/skills-sync` | domain | canonical | 0.83 | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools<br>runtime |
+| `skills-sync` | `src/modules/skills-sync` | domain | canonical | 0.84 | Exports and synchronizes skills across supported clients. | — | — | cli-shared<br>engine-gates<br>resources<br>shared-types<br>shared-utils | mcp-tools<br>runtime |
 | `text-references` | `src/modules/text-refs` | domain | canonical | 0.29 | Tracks and resolves reusable text argument references. | — | `index.ts` | shared-types<br>shared-utils | chains<br>mcp-tools<br>prompts<br>runtime |
 | `versioning` | `src/modules/versioning` | domain | canonical | 0.36 | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | cli-shared<br>engine-gates<br>prompts<br>resources<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime |
 | `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | 0.33 | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types<br>shared-utils | engine-execution<br>engine-gates<br>mcp-tools<br>prompts<br>shared-types |
@@ -294,7 +294,7 @@ flowchart LR
   module_shared_core -. type .-> module_shared_types
   module_shared_core -. type .-> module_shared_utils
   module_shared_types -. type .-> module_workflow_ir
-  module_shared_utils -. type .-> module_shared_types
+  module_shared_utils --> module_shared_types
   module_skills_sync --> module_cli_shared
   module_skills_sync --> module_engine_gates
   module_skills_sync --> module_resources

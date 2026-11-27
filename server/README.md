@@ -256,7 +256,7 @@ my-workspace/
 │               ├── tool.yaml    # Config (trigger, runtime, timeout)
 │               ├── schema.json  # Input validation schema
 │               └── script.py    # Validation logic
-├── config.jsonc              # Server settings (optional; config.json also still read)
+├── config.jsonc              # Server settings (optional; or config.json)
 ├── frameworks/               # Custom thinking frameworks (optional)
 └── gates/                    # Custom quality gates (optional)
 ```

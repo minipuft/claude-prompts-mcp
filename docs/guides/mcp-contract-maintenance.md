@@ -23,7 +23,8 @@ alone. A labelled list in a contract description (`ACTIONS: a | b`) must name ex
 the enum it restates. `npm run validate:framework-tool-descriptions` checks both that and the
 bundled frameworks' guidance.
 
-Contracts no longer generate Zod schemas — `mcp-schemas.ts` has been removed.
+Contracts generate no Zod schemas: the hand-written schemas in `src/mcp/tools/schemas/` own
+runtime validation.
 
 ## Critical: Upstream Verification
 

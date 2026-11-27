@@ -205,8 +205,8 @@ cpm config rollback <version>       # Restore a recorded version's bytes (--prev
 
 Every write to the file is recorded as a version carrying its exact bytes, comments included —
 including a persisted `gates`/`framework` toggle made over MCP. A write that changes no character
-records nothing. There are no `.backup.<timestamp>` files: they were removed in 5.0 because nothing
-read them back (see [CLI Guide § Config versions](../guides/cli.md#config-versions)).
+records nothing. A write leaves no `.backup.<timestamp>` file: the recorded versions are how a change
+is undone (see [CLI Guide § Config versions](../guides/cli.md#config-versions)).
 
 Full flag reference and subcommand details: [CLI Guide § config](../guides/cli.md#config).
 

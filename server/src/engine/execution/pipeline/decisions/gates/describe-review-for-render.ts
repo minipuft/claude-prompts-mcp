@@ -190,10 +190,10 @@ export function describeFrozenJudgeReview(
 
 /** The admitted next action, separate from the report grade and from new work. */
 function semanticReviewAction(protocol: FrozenReviewProjection): string | undefined {
-  if (protocol.exhausted === true && protocol.submission !== 'legacy')
+  if (protocol.exhausted === true && protocol.submission !== 'verdict-only')
     return 'The retry limit is reached. Choose gate_action: retry, skip or abort; no verdict is accepted.';
   switch (protocol.submission) {
-    case 'legacy':
+    case 'verdict-only':
       return undefined;
     case 'unavailable':
       return `Semantic review unavailable: ${protocol.reason ?? 'issued authority unavailable'}. No verdict can be accepted. Restore valid server review authority.`;

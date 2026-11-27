@@ -27,6 +27,8 @@ import type { ConfigManager, Logger } from '../../../src/shared/types/index.js';
 const COMMENTED_CONFIG = `// Production config — the comments are the handover notes.
 
 {
+  "version": 5,
+
   /* Gates gate the review chain. */
   "gates": {
     "enabled": false, // turned off during the 4471 incident

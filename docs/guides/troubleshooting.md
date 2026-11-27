@@ -19,7 +19,7 @@ Common issues and how to fix them.
    node dist/index.js --transport=stdio --debug-startup
    ```
 
-**Recommended**: Use the new path configuration system instead of deprecated env vars:
+**Recommended**: set the workspace with the `--workspace` flag or `MCP_WORKSPACE`:
 
 ```bash
 # Via CLI flags
@@ -36,7 +36,7 @@ something you did not ask for. The message names the variable or flag, its value
 resolved to, what is wrong, and what removing the setting would fall back to. It fires for:
 
 - `MCP_WORKSPACE` / `--workspace` or a `paths.resources` entry naming a path that does not exist or
-  is not a directory. The server no longer creates a missing workspace.
+  is not a directory. The server does not create a missing workspace.
 - `MCP_CONFIG_PATH` / `--config` naming a file that is missing, a directory, unreadable, or invalid
   (JSON for a `.json` path, JSONC for a `.jsonc` path).
 - A config file inside your workspace (`config.jsonc` or `config.json`) that is unreadable, a
@@ -60,9 +60,8 @@ cpm config validate -w /path/to/workspace
 says which one the server would read, so rather than guess (and silently prefer `.jsonc`), the
 server refuses to start, and every `cpm config` subcommand refuses the same way, naming both paths.
 
-**Fix**: delete whichever file you are not using. `config.jsonc` is the current name and the one
-that accepts comments; `config.json` is still read if you keep it instead — but a workspace may hold
-only one of the two.
+**Fix**: delete whichever file you are not using. The server reads either name: `config.jsonc`
+accepts comments, `config.json` is strict JSON. A workspace may hold only one of the two.
 
 ### A comment in `config.json` fails to parse
 
@@ -189,9 +188,9 @@ tool.
 away: `resource_manager(resource_type:"prompt", action:"guide")`, `system_control(action:"guide")`,
 or the tool description for `prompt_engine`.
 
-**Why it is an error rather than being ignored**: such a key used to be dropped silently while the
-call answered **success**. A mistyped _safety_ flag — `preview`, `confirm`, `persist` — therefore
-reported a guarded action while running it unguarded. See
+**Why it is an error rather than being ignored**: a key dropped silently would let the call answer
+**success**, so a mistyped _safety_ flag — `preview`, `confirm`, `persist` — would report a
+guarded action while running it unguarded. See
 [mcp-tools.md § Undeclared parameters](../reference/mcp-tools.md#undeclared-parameters).
 
 ### "'gate_verdict' is a parameter of prompt_engine, but not one this server is advertising right now"

@@ -119,10 +119,8 @@ repo/
 the script), because heap retained across files adds up: in one process it outgrew V8's
 default old-space ceiling on machines with less than about 14 GB of memory
 (2,240 MB measured on a 12 GB box), where the run aborted with
-`JavaScript heap out of memory` and exit 134. The scripts used to hide that
-behind a raised 4,096 MB heap ceiling (one process, 2.8 GB to 3.6 GB
-resident); the recycled worker keeps the heap bounded instead, so no
-script raises the ceiling any more.
+`JavaScript heap out of memory` and exit 134. The recycled worker keeps the
+heap bounded, so no script raises the ceiling.
 
 Measured 2026-10-04 on the 12 GB box, full unit suite (336 files, 6,012 passed,
 1 skipped in every run), peak resident set from `/usr/bin/time -v`:
@@ -259,8 +257,11 @@ one is a breaking change and ships in a major release. The steps:
 
 `npm run validate:retirements` (inside `validate:all`) fails an entry with no refusal site or no
 driver, a `retirementNotice` call naming no entry, a user-facing line matching a `docPattern`, and
-an upgrade page that differs from what the ledger renders. `npm run retirements:list` prints each
-entry with its dates and its refusal sites.
+an upgrade page that differs from what the ledger renders. It also fails wording that describes a
+form as old yet accepted, in user-facing text and in the strings `server/src`, `cli/src` and
+`hooks/` show; the phrases, and the few dated exemptions for forms not yet retired, are data in
+`server/scripts/retirement-wording.json`, and an exemption whose line is gone fails too. `npm run retirements:list` prints each entry with its dates and its refusal
+sites.
 
 **How long a refusal lasts.** `forgetAfter` defaults to six months after the release that begins
 the refusal; each entry carries its own date, so a different lifetime is that entry's own choice.
@@ -470,10 +471,7 @@ malformed override block and refused.
 That completeness is enforced, not promised. `scripts/pr-check.mjs` names each workflow step it
 mirrors and `server/tests/unit/scripts/pr-check-ci-parity.test.ts` reads the workflow file and
 fails when the two sets diverge, so a new gating step added to CI breaks the suite until the
-local mirror catches up. _Until 2026-09-15 this section named only the body check. The title is
-judged separately -- the script that checks the body says outright that it "does not read the
-title beyond its type" -- so following these instructions exactly still shipped an unchecked
-title, which is how #283 failed on `subject-case` after passing locally._
+local mirror catches up. The title is judged separately from the body, so `pr:check` runs both.
 
 **These scripts are installed, not written here.** `scripts/pr-check.mjs`, `scripts/pr-body.mjs`,
 `scripts/validate-pr-body.mjs`, `scripts/validate-squash-message.mjs`, `scripts/warn-contract-lag.mjs`,
@@ -493,7 +491,7 @@ a managed file (`update` refuses to overwrite one; other edits may stay uncommit
 beside the bump. `commitlint.config.mjs` (the scope list), the PR template and the ADR template are
 seeded, not managed: they are this repository's own and are edited here.
 
-The `PR Conventions` workflow is a **required** context (since 2026-09-02) on every non-bot PR;
+The `PR Conventions` workflow is a **required** context on every non-bot PR;
 bot PRs (renovate, release-please) are exempt from the authored-body checks because their bodies
 are machine-owned. The body check fails on surviving `___` placeholders, unfilled verification
 rows, a non-finalized `Plan:` footer, and a `Decision: ADR-NNNN` trailer naming an ADR that has no
@@ -533,11 +531,6 @@ A row nobody has marked counts as **unfinished**, not as done -- so an unmarked 
 open rather than triggering a demand to retire it. Where a plan's tables are graded by words
 (`RULED`, `REVISED`) instead of the `☐`/`✓`/`✗`/`⊘` vocabulary, there is no progress to measure and
 the original rule stands unchanged: finalize the plan in the same PR, or the PR does not merge.
-
-_Until 2026-09-06 the single rule was "finalize the plan in this PR". It was reachable only by
-plans short enough to finish in one PR: #262 named a six-phase umbrella whose open rows spanned an
-unbuilt resource type and a four-repository rename arc, so the gate was red with no green available
-to it -- a gate that cannot be retired, which `cleanup-standards.md` prices as a bug._
 
 **The footer is also the join key across a multi-PR initiative.** Every PR of one plan carries the
 same footer, so `git log --grep='Plan: .*<slug>'` lists the whole arc on `main`; there is no

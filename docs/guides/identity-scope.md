@@ -133,7 +133,7 @@ it for every client.
 
 ## Configure via config.jsonc
 
-Add an `identity` section to your `config.jsonc` (`config.json` is also still read):
+Add an `identity` section to your config file (`config.jsonc` or `config.json`):
 
 ```json
 {
@@ -321,7 +321,6 @@ the bundled resources still contribute to reads. A missing workspace refuses sta
 
 ## See Also
 
-- [Workspace Identity Migration](workspace-organization-identity-migration.md) -- naming migration history
 - [Client Integration](client-integration.md) -- per-client install snippets and verification steps
 - [Client Capabilities Reference](../reference/client-capabilities.md) -- presets, profile mapping, and limits
 - [Injection Control](injection-control.md) -- per-request framework injection

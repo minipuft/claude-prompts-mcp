@@ -4,7 +4,7 @@ OpenTelemetry-based tracing for the Claude Prompts MCP server. Provides producti
 
 ## Quick Start
 
-Add to `config.jsonc` (`config.json` is also still read):
+Add to your config file (`config.jsonc` or `config.json`):
 
 ```json
 {
@@ -101,10 +101,8 @@ fails the build if any registerable event loses its producer again.
 > **`chain/complete` is last.** Every step of a run announces its `chain/step_complete` before
 > the run announces its terminal event, including the final step of a gated run — a verdict
 > that clears a review decides the advance, and `StepResponseCaptureStage` performs it only
-> after the step has been captured and announced. Until 4.1 the gated case was the other way
-> round (the PASS advanced past the last node, latching the run terminal, while the step it
-> answered was still uncaptured), so a client that tore its handler down on `chain/complete`
-> missed the final step event. The same holds for an advisory or informational FAIL, which also
+> after the step has been captured and announced, so a client that tears its handler down on
+> `chain/complete` has already seen the final step event. The same holds for an advisory or informational FAIL, which also
 > walks the run forward.
 > It is the last notification of a run and follows the final verdict: completion is decided once per call, after grading, so a call that sends an answer back for review never carries it.
 

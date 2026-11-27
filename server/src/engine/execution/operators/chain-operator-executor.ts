@@ -197,7 +197,7 @@ export class ChainOperatorExecutor {
     const responseFormatSection = this.buildResponseFormatSection(
       {
         coverage:
-          gateGuidanceEnabled && review.protocol.submission === 'legacy'
+          gateGuidanceEnabled && review.protocol.submission === 'verdict-only'
             ? review.gateIds.length
             : false,
       },

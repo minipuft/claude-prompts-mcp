@@ -505,7 +505,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
     expect(mixed).toContain('Semantic report acceptance: 1 accepted / 1 rejected / 1 invalid');
     expect(mixed).toContain('Recorded tool checks: 1 passed / 1 not passed');
     expect(mixed).toContain('attempted execution and exit status unavailable');
-    expect(mixed).toContain('Legacy unverified acceptance: 0 passed / 0 failed');
+    expect(mixed).toContain('Verdict-only acceptance: 0 passed / 0 failed');
     expect(mixed).toContain('Dispositions: 1 held / 1 advisory-cleared / 1 informational-cleared');
     const bypassStats = statistics.split('- `reader-bypass`:')[1]!.split('\n- `')[0];
     expect(bypassStats).toContain('effective acceptance 0 passed / 0 failed');
@@ -515,7 +515,7 @@ describe('Streamable HTTP: a gate review states one state', () => {
       'reminder attestations: 1'
     );
     expect(statistics.split('- `reader-legacy`:')[1]!.split('\n- `')[0]).toContain(
-      'Legacy unverified acceptance: 1 passed / 0 failed'
+      'Verdict-only acceptance: 1 passed / 0 failed'
     );
   }, 180000);
 });

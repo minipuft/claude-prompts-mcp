@@ -141,7 +141,7 @@ The exported set is recomputed at startup and on every prompt hot reload, not re
 - A client set to `'all'` deregisters every prompt
 - No manual `registerWithMcp: false` flags needed
 
-**`>>` still works.** Deregistration removes only the MCP prompts-protocol listing. `prompt_engine` resolves `>>id` against its own prompt set, which this never touches — so an exported prompt keeps its full gate, chain, and framework machinery when you invoke it symbolically. That is the intended split:
+**`>>` is unaffected.** Deregistration removes only the MCP prompts-protocol listing. `prompt_engine` resolves `>>id` against its own prompt set, which this never touches — so an exported prompt keeps its full gate, chain, and framework machinery when you invoke it symbolically. That is the intended split:
 
 | Path                          | What you get                                                                                         |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------- |

@@ -1,11 +1,12 @@
 /**
- * `validate:retirements` with a planted case per check (1 to 5), each asserting the failure
+ * `validate:retirements` with a planted case per check (1 to 6), each asserting the failure
  * names the entry or the file it is about, then the live tree as the clean case. The checks are pure
  * functions over entries, sites and driver ids, so every planted case is data; the site and
  * driver scanners are driven over planted source text, including a commented-out call that must
- * not count as a site.
+ * not count as a site. Check 6's code scanner is driven over a planted git repository holding
+ * TypeScript and Python sources, tests and comments, through the real Python parser.
  */
-import { describe, expect, it } from '@jest/globals';
+import { afterAll, beforeAll, describe, expect, it } from '@jest/globals';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -14,6 +15,11 @@ import { fileURLToPath } from 'node:url';
 
 import { renderUpgradingPage, UPGRADING_PAGE } from '../../../scripts/generate-retirements-doc.js';
 import { expiryOutcomes } from '../../../scripts/lib/retirement-expiry.js';
+import {
+  findTypeScriptStrings,
+  loadWordingRules,
+  scanCodeStrings,
+} from '../../../scripts/lib/third-state-wording.js';
 import { selectUserFacingFiles } from '../../../scripts/lib/user-facing-scope.js';
 import {
   DRIVER_FILE,
@@ -42,6 +48,19 @@ const OTHER = {
   docPattern: null,
 };
 const PAGE = '# Upgrading\n\nplanted page\n';
+const PHRASES = loadWordingRules(REPO_ROOT).phrases;
+const TWO_STATES = 'The product has two states for a spelling, accepted or refused';
+
+const git = (cwd: string, ...args: string[]): void => {
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))
+  );
+  execFileSync('git', args, { cwd, env, stdio: 'ignore' });
+};
+const plant = (root: string, file: string, text: string): void => {
+  mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+  writeFileSync(path.join(root, file), text);
+};
 
 /** A clean planted input: two entries, each with a site and a driver, before any date. */
 function clean(overrides: Partial<RetirementCheckInput> = {}): RetirementCheckInput {
@@ -55,6 +74,8 @@ function clean(overrides: Partial<RetirementCheckInput> = {}): RetirementCheckIn
     texts: [
       { file: 'docs/guides/clean.md', lines: [{ line: 1, text: 'Describe the current form.' }] },
     ],
+    codeStrings: [],
+    wording: { phrases: PHRASES, exemptions: [] },
     expectedPage: PAGE,
     upgradingPage: PAGE,
     today: '2026-11-27',
@@ -155,17 +176,6 @@ describe('validate:retirements', () => {
   });
 
   describe('check 3: retired spellings in user-facing text', () => {
-    const git = (cwd: string, ...args: string[]): void => {
-      const env = Object.fromEntries(
-        Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_'))
-      );
-      execFileSync('git', args, { cwd, env, stdio: 'ignore' });
-    };
-    const plant = (root: string, file: string, text: string): void => {
-      mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-      writeFileSync(path.join(root, file), text);
-    };
-
     it('fails a guide that names a retired spelling, naming the file, the line and the entry', () => {
       const texts = [
         {
@@ -371,11 +381,159 @@ describe('validate:retirements', () => {
     });
   });
 
+  describe('check 6: third-state wording', () => {
+    const OLD_FLAG = {
+      file: 'docs/guides/flags.md',
+      lines: [
+        { line: 1, text: 'Pass `--new-flag` to choose the folder.' },
+        { line: 2, text: 'The old flag still works.' },
+      ],
+    };
+
+    it('fails a guide line saying the old flag still works, naming the file, the line and the phrase', () => {
+      const failures = runRetirementChecks(clean({ texts: [OLD_FLAG] })).failures;
+
+      expect(failures).toHaveLength(1);
+      expect(failures[0]).toMatchObject({ check: 6, subject: 'docs/guides/flags.md:2' });
+      expect(failures[0]?.message).toContain(
+        'docs/guides/flags.md:2: "still works" (still-accepted)'
+      );
+      expect(failures[0]?.message).toContain(TWO_STATES);
+      expect(failures[0]?.message).toContain('CONTRIBUTING.md, Retiring a Spelling');
+    });
+
+    it('reads string literals and template text from TypeScript, never comments, keys, imports or literal types', () => {
+      const text = [
+        "import { x } from './deprecated-module.js';",
+        '// the --old-flag is deprecated',
+        '/* deprecated */',
+        "type Status = 'deprecated' | 'working';",
+        "const keyed = { 'deprecated': 1 };",
+        "throw new Error('--old-flag is deprecated; use --new-flag');",
+        'const shown = `first line',
+        'the old name is legacy`;',
+      ].join('\n');
+
+      expect(findTypeScriptStrings('server/src/flags.ts', text)).toEqual([
+        { line: 6, text: '--old-flag is deprecated; use --new-flag' },
+        { line: 7, text: 'first line' },
+        { line: 8, text: 'the old name is legacy' },
+      ]);
+    });
+
+    describe('over a planted repository', () => {
+      let root = '';
+      let failures: { check: number; subject: string; message: string }[] = [];
+
+      beforeAll(() => {
+        root = mkdtempSync(path.join(tmpdir(), 'retirement-wording-'));
+        const deprecated = "export const note = '--old-flag is deprecated';\n";
+        plant(root, 'server/src/flags.ts', `${deprecated}// a comment: deprecated\n`);
+        plant(
+          root,
+          'server/src/commented.ts',
+          '// --old-flag is deprecated\nexport const x = 1;\n'
+        );
+        plant(root, 'server/tests/unit/flags.test.ts', deprecated);
+        plant(root, 'server/src/flags.test.ts', deprecated);
+        plant(
+          root,
+          'hooks/lib/flags.py',
+          '"""Module docstring: deprecated."""\n# the old flag is deprecated\nNOTE = "--old-flag is deprecated"\n'
+        );
+        plant(root, 'hooks/lib/commented.py', '# deprecated\nVALUE = 1\n');
+        plant(root, 'hooks/tests/test_flags.py', 'NOTE = "--old-flag is deprecated"\n');
+        git(root, 'init', '-q');
+        git(root, 'add', '-A');
+        failures = runRetirementChecks(clean({ codeStrings: scanCodeStrings(root) })).failures;
+      });
+
+      afterAll(() => {
+        rmSync(root, { recursive: true, force: true });
+      });
+
+      it('fails a string literal in src and in a hook, each naming file, line and phrase', () => {
+        expect(failures.map((finding) => finding.subject).sort()).toEqual([
+          'hooks/lib/flags.py:3',
+          'server/src/flags.ts:1',
+        ]);
+        expect(failures.every((finding) => finding.check === 6)).toBe(true);
+        expect(failures.map((finding) => finding.message)).toEqual(
+          expect.arrayContaining([
+            expect.stringContaining('server/src/flags.ts:1: "deprecated" (deprecated)'),
+            expect.stringContaining('hooks/lib/flags.py:3: "deprecated" (deprecated)'),
+          ])
+        );
+      });
+
+      it('passes the same word in a comment, a docstring and a test file', () => {
+        const subjects = failures.map((finding) => finding.subject);
+
+        expect(subjects).not.toContain('server/src/flags.ts:2');
+        expect(subjects.some((subject) => subject.startsWith('server/src/commented.ts'))).toBe(
+          false
+        );
+        expect(subjects.some((subject) => subject.startsWith('hooks/lib/commented.py'))).toBe(
+          false
+        );
+        expect(subjects).not.toContain('hooks/lib/flags.py:1');
+        expect(subjects).not.toContain('hooks/lib/flags.py:2');
+        expect(
+          subjects.some((subject) => /tests?\//.test(subject) || subject.includes('.test.'))
+        ).toBe(false);
+      });
+    });
+
+    describe('exemptions', () => {
+      const exemption = {
+        id: 'old-flag-not-yet-retired',
+        phrase: 'still-accepted',
+        sites: [{ file: 'docs/guides/flags.md', lines: 1 }],
+        reason: 'planted',
+        asOf: '2026-11-27',
+        removeWhen: 'planted',
+      };
+
+      it('passes an exempted line', () => {
+        const wording = { phrases: PHRASES, exemptions: [exemption] };
+
+        expect(runRetirementChecks(clean({ texts: [OLD_FLAG], wording })).failures).toEqual([]);
+      });
+
+      it('fails an exemption whose line is gone, naming the exemption', () => {
+        const wording = { phrases: PHRASES, exemptions: [exemption] };
+        const gone = { ...OLD_FLAG, lines: OLD_FLAG.lines.slice(0, 1) };
+
+        const failures = runRetirementChecks(clean({ texts: [gone], wording })).failures;
+
+        expect(failures).toHaveLength(1);
+        expect(failures[0]).toMatchObject({ check: 6, subject: exemption.id });
+        expect(failures[0]?.message).toContain(
+          `exemption ${exemption.id} covers 1 line(s) of docs/guides/flags.md`
+        );
+        expect(failures[0]?.message).toContain('no line matches any more');
+      });
+
+      it('fails an exemption that covers fewer lines than the file holds', () => {
+        const wording = { phrases: PHRASES, exemptions: [exemption] };
+        const grown = {
+          ...OLD_FLAG,
+          lines: [...OLD_FLAG.lines, { line: 3, text: 'The old name still works too.' }],
+        };
+
+        expect(runRetirementChecks(clean({ texts: [grown], wording })).failures).toMatchObject([
+          { check: 6, subject: exemption.id },
+        ]);
+      });
+    });
+  });
+
   it('passes the live tree: a site and a driver per entry, no retired name in user-facing text, the page current', () => {
     const entries = listRetirements();
     const sites = scanRefusalSites();
     const driverIds = findDriverIds(readFileSync(path.join(REPO_ROOT, DRIVER_FILE), 'utf8'));
     const texts = scanUserFacingText(REPO_ROOT);
+    const codeStrings = scanCodeStrings(REPO_ROOT);
 
     // The scans observed something: a site per entry and one driver per entry.
     expect(new Set(sites.map((site) => site.id))).toEqual(
@@ -385,12 +543,17 @@ describe('validate:retirements', () => {
       expect.arrayContaining(['README.md', 'docs/reference/configuration.md'])
     );
     expect([...(driverIds ?? [])].sort()).toEqual(entries.map((entry) => entry.id).sort());
+    expect(codeStrings.map((source) => source.file)).toEqual(
+      expect.arrayContaining(['server/src/index.ts', 'cli/src/index.ts', 'hooks/gate-enforce.py'])
+    );
     expect(
       runRetirementChecks({
         entries,
         sites,
         driverIds,
         texts,
+        codeStrings,
+        wording: loadWordingRules(REPO_ROOT),
         expectedPage: renderUpgradingPage(entries),
         upgradingPage: readFileSync(path.join(REPO_ROOT, UPGRADING_PAGE), 'utf8'),
         today: '2026-11-27',

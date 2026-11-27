@@ -29,7 +29,7 @@ arguments:
     type: string
   - name: library
     required: false
-    description: Compat alias filled by the evaluation chain; standalone callers use subject
+    description: Filled by tech_evaluation_chain, whose argument is library; standalone callers use subject
     type: string
 gateConfiguration:
   include:

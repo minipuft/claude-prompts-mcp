@@ -65,10 +65,9 @@ processingSteps:
 
 ## Declared Sections
 
-Phase guards used to grade a response against `section_header` strings that lived only in
-`phases.yaml` — nothing derived the prompt-time instruction from that same source, so a guard could
-block on a header the model was never told to produce. `server/src/engine/frameworks/declared-sections.ts`
-closes that gap: it is the single source both the render path and the grading path read.
+A phase guard grades a response against the headers the prompt told the model to produce.
+`server/src/engine/frameworks/declared-sections.ts` is the single source both the render path and
+the grading path read, so a guard cannot block on a header the model was never told to produce.
 
 ```
 phases.yaml (section_header + guards)
@@ -158,7 +157,7 @@ Phase guard behavior is controlled by the `phaseGuards.mode` config setting:
 
 ### Configuration
 
-In `config.jsonc` (`config.json` is also still read):
+In your config file (`config.jsonc` or `config.json`):
 
 ```json
 {

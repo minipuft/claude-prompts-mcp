@@ -461,7 +461,7 @@ export class PathResolver {
         resolved: this.getWorkspace(),
         problem: `holds both config.jsonc (${jsoncPath}) and config.json (${jsonPath})`,
         expected: 'a single config file',
-        remedy: `keep config.jsonc, the current name, and remove config.json (also still read)`,
+        remedy: 'keep one of the two files: the server reads either name, never both',
       })
     );
   }
@@ -482,7 +482,7 @@ export class PathResolver {
       throw new PathSettingError(
         [
           `Refusing to start: the project workspace ${projectWorkspace} holds both config.jsonc (${jsoncPath}) and config.json (${jsonPath}).`,
-          `Expected a single config file there, or keep config.jsonc, the current name, and remove config.json (also still read).`,
+          'Expected a single config file there: keep one of the two, the server reads either name, never both.',
         ].join('\n')
       );
     }

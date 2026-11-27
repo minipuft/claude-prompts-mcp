@@ -30,26 +30,17 @@ capture is unavailable; no path lookup or invented binding is performed.
 > declares `enforcement_mode: blocking`: no gate review holds that initial response. Declare
 > ground-truth criteria on gates you attach to chains.
 >
-> **A criterion that cannot be enforced is now refused at load.** `shell_verify` without a
+> **A criterion that cannot be enforced is refused at load.** `shell_verify` without a
 > `shell_command`, and `script_tool` without a `script_tool_id`, fail gate loading with a message
-> naming the missing field. Previously both auto-passed at review time, so a gate declaring a check
-> it could not perform read as verified. This is a breaking change for any gate file relying on the
-> old permissiveness.
+> naming the missing field, so a gate never declares a check it cannot perform.
 >
-> The history is worth keeping: until 2026-08-19 `script_tool` was accepted by the schema and
-> executed by nothing. Stage 20 (`20-gate-review-stage.ts`) is the only live consumer of
-> `pass_criteria` and it filtered for `shell_verify` alone, so a gate declaring `script_tool`
-> cleared review having verified nothing — silently, with no warning and no output. It now runs
-> beside `shell_verify` through the same coverage decision, which reads only gate id and pass/fail
-> and is therefore mechanism-agnostic.
->
-> A second criteria runner (`GateValidator`) existed alongside Stage 20 with its own, weaker
-> `shell_verify` implementation and no production caller at all. It was deleted on 2026-08-19
-> rather than revived: every criteria type now has exactly one owner, and the pipeline stages are
-> it.
+> Stage 20 (`20-gate-review-stage.ts`) is the one consumer of `pass_criteria`. It runs
+> `script_tool` beside `shell_verify` through the same coverage decision, which reads only gate id
+> and pass/fail and is therefore mechanism-agnostic: every criteria type has exactly one owner,
+> and the pipeline stages are it.
 
 > [!NOTE]
-> The former `content_check` and `pattern_check` types have been renamed to `inline_guidance` (commit `380655e4`). Neither had a runtime enforcement path wired — both rendered guidance text and relied on the agent's self-reported verdict. The rename makes the actual behavior honest. See [Phase Guards Guide](./phase-guards.md) for `framework_compliance` and the schema header in `server/src/engine/gates/core/gate-schema.ts` for the canonical taxonomy.
+> `inline_guidance` has no runtime enforcement path: it renders guidance text and relies on the agent's self-reported verdict, and its name says so. See [Phase Guards Guide](./phase-guards.md) for `framework_compliance` and the schema header in `server/src/engine/gates/core/gate-schema.ts` for the canonical taxonomy.
 
 ### Single prompts and pending reviews
 
@@ -69,10 +60,8 @@ when acceptance must hold the step from its first render.
 
 ### Declared Headers — A Guard Cannot Block on What the Prompt Never Said
 
-Stage 19's structural checks used to grade a response against `section_header` strings that lived
-only in `phases.yaml`, with nothing deriving the prompt-time instruction from that same source — a
-guard could block on a header the model was never told to produce. `server/src/engine/frameworks/declared-sections.ts`
-is now the single source both the render path (chain steps, and gated single prompts carrying
+Stage 19's structural checks grade a response against the headers the prompt told the model to
+produce. `server/src/engine/frameworks/declared-sections.ts` is the single source both the render path (chain steps, and gated single prompts carrying
 explicit `gates`) and the grading path read; a header the prompt never named is advisory only — it
 warns, it never blocks. See the [Phase Guards Guide](./phase-guards.md#declared-sections) for the
 full mechanism, including which guard criteria (`contains_any`, `max_length`, …) are safe to declare
@@ -206,16 +195,13 @@ pass_criteria:
     shell_command: ["npm", "test"] # argv
 ```
 
-A bare string **fails to load**, with a message naming the fix. It used to be joined into
-`sh -c '<string>'`, so the shell parsed whatever the gate author wrote — and a gate file is
-exactly what an attacker drops into a workspace.
-
-What that cost: the operator's allowlist was checking TEXT rather than a command. A prefix
-entry like `npm *` had to be defended by enumerating shell metacharacters, and an
-enumeration is only ever as good as its last review. Argv is the structural version of the
-same guarantee, and it is the move this codebase already made for resource writes — assert
+A bare string **fails to load**, with a message naming the fix. A string would be handed to
+`sh -c`, so the shell would parse whatever the gate author wrote — and a gate file is exactly
+what an attacker drops into a workspace. An allowlist over a string checks TEXT rather than a
+command: a prefix entry like `npm *` could only be defended by enumerating shell
+metacharacters. Argv is the structural version of the same guarantee, and it is the move this codebase already made for resource writes — assert
 the property rather than enumerate the vectors. `["npm", "test"]` cannot become two commands,
-so a prefix entry is sound and the metacharacter rule no longer applies to this shape.
+so a prefix entry is sound and the metacharacter rule does not apply to this shape.
 
 **It does not put a shell out of reach**, and pretending otherwise would be the more
 dangerous claim. `["sh", "-c", "..."]` is still expressible — it simply has to appear in

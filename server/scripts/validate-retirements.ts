@@ -24,7 +24,9 @@
  *      fails once the package's major is greater than the major of its `refusedIn`.
  *   5. `docs/reference/upgrading.md` on disk is exactly what `generate-retirements-doc.ts`
  *      renders from the ledger, so a hand edit or a stale page fails naming the command to run.
- * Check 6 (third-state wording) is not here.
+ *   6. no user-facing line and no string the product shows describes a form as old but still
+ *      accepted ("still works", "legacy", "deprecated"): `scripts/lib/third-state-wording.ts`,
+ *      with its phrases and exemptions in `scripts/retirement-wording.json`.
  *
  * `--list` prints the log instead: each entry with its dates and its sites as `file:line`.
  *
@@ -43,6 +45,13 @@ import {
   UPGRADING_PAGE,
 } from './generate-retirements-doc.js';
 import { expiryOutcomes, isoToday } from './lib/retirement-expiry.js';
+import {
+  checkWording,
+  findWordingHits,
+  loadWordingRules,
+  scanCodeStrings,
+  type WordingRules,
+} from './lib/third-state-wording.js';
 import {
   listUserFacingFiles,
   readUserFacingLines,
@@ -73,7 +82,7 @@ export interface RetirementSite {
 
 /** A failed check, naming the entry (or the site) it is about. */
 export interface RetirementFinding {
-  readonly check: 1 | 2 | 3 | 4 | 5;
+  readonly check: 1 | 2 | 3 | 4 | 5 | 6;
   readonly subject: string;
   readonly message: string;
 }
@@ -92,8 +101,12 @@ export interface RetirementCheckInput {
   readonly sites: readonly RetirementSite[];
   /** Ids the driver table covers, or null when the table could not be found. */
   readonly driverIds: readonly string[] | null;
-  /** Every user-facing file, for check 3. */
+  /** Every user-facing file, for checks 3 and 6. */
   readonly texts: readonly ScannedText[];
+  /** The displayable strings of the code scope, for check 6. */
+  readonly codeStrings: readonly ScannedText[];
+  /** Check 6's phrases and exemptions. */
+  readonly wording: WordingRules;
   /** What the generator renders from the ledger, and the page as it is on disk (null: absent). */
   readonly expectedPage: string;
   readonly upgradingPage: string | null;
@@ -275,7 +288,17 @@ export function checkUpgradingPage(expected: string, onDisk: string | null): Ret
   ];
 }
 
-/** Checks 1 to 5 over planted or scanned input; pure. */
+/** Check 6: third-state wording in user-facing text and in code strings, minus exemptions. */
+export function checkThirdStateWording(
+  texts: readonly ScannedText[],
+  codeStrings: readonly ScannedText[],
+  wording: WordingRules
+): RetirementFinding[] {
+  const hits = findWordingHits([...texts, ...codeStrings], wording.phrases);
+  return checkWording(hits, wording.exemptions).map((finding) => ({ check: 6, ...finding }));
+}
+
+/** Checks 1 to 6 over planted or scanned input; pure. */
 export function runRetirementChecks(input: RetirementCheckInput): RetirementCheckResult {
   const expiry = expiryOutcomes(input.entries, {
     today: input.today,
@@ -293,6 +316,7 @@ export function runRetirementChecks(input: RetirementCheckInput): RetirementChec
       ...checkDocPatterns(input.entries, input.texts),
       ...checkUpgradingPage(input.expectedPage, input.upgradingPage),
       ...expiry.failures.map(asFinding),
+      ...checkThirdStateWording(input.texts, input.codeStrings, input.wording),
     ],
     warnings: expiry.warnings.map(asFinding),
   };
@@ -376,10 +400,18 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
+  const codeStrings = scanCodeStrings(REPO_ROOT);
+  if (!codeStrings.some((source) => source.lines.length > 0)) {
+    console.error(`❌ ${GATE}: the code scope held no string literal; the scan is broken.`);
+    process.exitCode = 1;
+    return;
+  }
   const { failures, warnings } = runRetirementChecks({
     entries,
     sites,
     texts,
+    codeStrings,
+    wording: loadWordingRules(REPO_ROOT),
     expectedPage: renderUpgradingPage(entries),
     upgradingPage: readUpgradingPage(),
     driverIds: findDriverIds(readFileSync(path.join(REPO_ROOT, DRIVER_FILE), 'utf8')),
@@ -393,7 +425,7 @@ function main(): void {
     return;
   }
   console.log(
-    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page current, ${warnings.length} past its date`
+    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page current, ${warnings.length} past its date; ${codeStrings.length} code file(s) and the user-facing text free of third-state wording outside its exemptions`
   );
 }
 

@@ -384,7 +384,7 @@ const TEMPLATE_FILE_HEADER: readonly string[] = [
   'Comments and trailing commas are both fine here — that is what the .jsonc extension buys.',
   'Uncomment a single line and the file still parses; there are no commas to fix afterwards.',
   '',
-  'A plain config.json is still read if you prefer one. It simply cannot carry comments.',
+  'The server reads a plain config.json the same way. It cannot carry comments.',
 ];
 
 function commentedLine(depth: number, payload: string): string {

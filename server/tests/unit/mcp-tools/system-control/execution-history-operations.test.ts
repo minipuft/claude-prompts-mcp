@@ -280,7 +280,7 @@ describe('execution_history gate facts', () => {
     const out = await listGate(verdict({ attempt: 0, rationale: 'looks right' }));
 
     expect(out).toContain('  - ✓ `g` PASS (attempt 1) — looks right');
-    expect(out).toContain('Legacy unverified acceptance: no recorded semantic or tool component.');
+    expect(out).toContain('Verdict-only acceptance: no recorded semantic or tool component.');
   });
 
   test('a failed gate shows ✗ and omits an empty rationale and an unknown attempt', async () => {
@@ -294,7 +294,7 @@ describe('execution_history gate facts', () => {
 
     expect(out).toContain('  - ≡ `g` PASS');
     expect(out).toContain('Reminder attestation: self-declared, not graded.');
-    expect(out).not.toContain('Legacy unverified acceptance');
+    expect(out).not.toContain('Verdict-only acceptance');
   });
 
   test('a disposition is printed on its own line', async () => {
@@ -323,7 +323,7 @@ describe('execution_history gate facts', () => {
 
     expect(out).toContain(`Semantic report contract: ${expected} (not model accuracy)`);
     expect(out).toContain('Criterion states: c1: met; c2: invalid');
-    expect(out).not.toContain('Legacy unverified acceptance');
+    expect(out).not.toContain('Verdict-only acceptance');
   });
 
   test('tool checks list passed and not-passed results with the unavailable-exit-status caveat', async () => {
@@ -340,7 +340,7 @@ describe('execution_history gate facts', () => {
       'Recorded tool checks: passed — npm test exit 0; not passed — lint exit 1'
     );
     expect(out).toContain('Attempted execution and exit status: unavailable');
-    expect(out).not.toContain('Legacy unverified acceptance');
+    expect(out).not.toContain('Verdict-only acceptance');
   });
 
   test('reported claims render the reported verdict, group and both bindings', async () => {
@@ -414,7 +414,7 @@ describe('execution_history gate facts', () => {
       expect(out).toContain('  - ↪ `g` BYPASS (after attempt 2/3) — operator skipped');
       expect(out).toContain('    Disposition: bypassed');
       expect(out).not.toContain('Reminder attestation');
-      expect(out).not.toContain('Legacy unverified acceptance');
+      expect(out).not.toContain('Verdict-only acceptance');
     });
 
     test('without a known budget the attempt has no denominator', async () => {

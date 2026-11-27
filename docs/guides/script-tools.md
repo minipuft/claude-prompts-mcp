@@ -421,12 +421,9 @@ Auto-detection covers `.py`, `.js`, `.mjs`, `.cjs`, `.ts`, `.sh`, and `.bash`. *
 else — including a file with no extension — is refused**, with a message naming the
 extension and the fix.
 
-It used to become `shell`. A file the table knew nothing about was handed to `bash` on the
-strength of no evidence at all, announced only at debug level. Note what is and is not
-wrong there: `shell` builds an argv array (`bash script.sh`) and carries the same risk
-posture as `python script.py`, so the problem was never that `shell` exists — it was
-`shell` being the silent default for files nobody had classified. Declaring
-`runtime: shell` is fully supported and is now the way to run one.
+`shell` builds an argv array (`bash script.sh`) and carries the same risk posture as
+`python script.py`; what it never is, is the silent default for a file nobody classified.
+Declaring `runtime: shell` is fully supported and is the way to run one.
 
 ```yaml
 # refused: nothing selects a runtime for '.rb' files
@@ -576,11 +573,9 @@ than emitting the camelCase spelling.
 
 Every OTHER way `resource_manager` can say no — a parameter the resource type does not own, an
 unconfirmed destructive action, a target that does not exist, a value of the wrong type — comes
-back as an error reply rather than being caught before the call. Those replies used to be stored
-in the run's script results and logged, and nothing read them, so the prompt rendered normally and
-`prompt_engine` answered success over a mutation that never happened.
-
-The run now fails, naming the script tool and carrying `resource_manager`'s own message verbatim:
+back as an error reply rather than being caught before the call. The run fails on such a reply,
+so `prompt_engine` never answers success over a mutation that did not happen. The failure names the script tool and
+carries `resource_manager`'s own message verbatim:
 
 ```
 Script tool 'my_tool' emitted an auto_execute call that resource_manager refused.
@@ -588,8 +583,8 @@ Script tool 'my_tool' emitted an auto_execute call that resource_manager refused
 ```
 
 A script's emitted parameters are also validated against the **same** `resource_manager` schema an
-MCP client's call is validated against. The in-process path previously ran none, so a script could
-send `limit: "not-a-number"` — a shape no client could — and reach the router untyped.
+MCP client's call is validated against, so a script cannot send `limit: "not-a-number"` — a shape no
+client could — and reach the router untyped.
 
 An accepted `auto_execute` is unaffected: it runs, `{{tool_<id>_result}}` holds its reply, and the
 prompt renders as before.

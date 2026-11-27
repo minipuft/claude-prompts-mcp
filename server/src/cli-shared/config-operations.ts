@@ -148,7 +148,7 @@ function ambiguousConfigError(dir: string): string | undefined {
   }
   return (
     `Two config files in one directory: ${present.join(' and ')}. ` +
-    `Keep one — ${USER_CONFIG_FILENAMES[0]} is the 5.0 name, ${USER_CONFIG_FILENAMES[1]} is still read.`
+    'Keep one: the server reads either name, never both.'
   );
 }
 

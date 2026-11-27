@@ -359,7 +359,7 @@ PATH OPTIONS:
   --workspace=/path       Base directory for all assets (resources/, config.jsonc, hooks/);
                           the server refuses to start if it is not an existing
                           directory, or if a config.jsonc or config.json there is not a
-                          JSON object (config.json is still read if that is what exists)
+                          JSON object
   --config=/path          Direct path to your config file (config.jsonc or config.json,
                           by extension); the server refuses to start if it is not a
                           readable config file

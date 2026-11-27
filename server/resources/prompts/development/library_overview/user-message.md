@@ -47,7 +47,7 @@ Based on the context provided:
 
 - Maintenance concerns
 - Known security issues
-- Deprecation signals
+- APIs the maintainers have announced for removal
 
 ---
 
