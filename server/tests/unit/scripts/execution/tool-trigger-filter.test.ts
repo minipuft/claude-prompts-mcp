@@ -69,7 +69,6 @@ describe('ToolTriggerFilter', () => {
 
       expect(result.readyForExecution).toHaveLength(1);
       expect(result.readyForExecution[0].toolId).toBe('test_tool');
-      expect(result.skippedManual).toHaveLength(0);
       expect(result.pendingConfirmation).toHaveLength(0);
       expect(result.requiresConfirmation).toBe(false);
     });
@@ -171,7 +170,6 @@ describe('ToolTriggerFilter', () => {
       expect(result.readyForExecution.map((m) => m.toolId).sort()).toEqual(
         ['auto_tool', 'confirm_tool_explicit'].sort()
       );
-      expect(result.skippedManual).toHaveLength(0);
       expect(result.pendingConfirmation).toHaveLength(1);
       expect(result.pendingConfirmation[0].toolId).toBe('confirm_tool');
     });
@@ -183,7 +181,6 @@ describe('ToolTriggerFilter', () => {
       const result = service.filterByTrigger([match], [tool], 'test_prompt');
 
       expect(result.readyForExecution).toHaveLength(0);
-      expect(result.skippedManual).toHaveLength(0);
       expect(result.pendingConfirmation).toHaveLength(0);
     });
 
@@ -201,7 +198,6 @@ describe('ToolTriggerFilter', () => {
     it('should build structured confirmation response with re-run syntax', () => {
       const filterResult = {
         readyForExecution: [],
-        skippedManual: [],
         pendingConfirmation: [
           {
             toolId: 'tool1',

@@ -13,8 +13,7 @@
  *
  * Output:
  * - context.state.scripts.results (Map<toolId, ScriptExecutionResult>)
- * - context.state.scripts.toolsSkipped (string[]) - `trigger: explicit` tools without an explicit request
- * - context.state.scripts.toolsPendingConfirmation (string[]) - Confirm mode tools awaiting approval
+ * - context.state.scripts.toolsPendingConfirmation (string[]) - tools with `confirm: true` awaiting approval
  *
  * The script results are later merged into template context in StepExecutionStage
  * as {{tool_<id>}} variables.
@@ -137,20 +136,13 @@ export class ScriptExecutionStage extends BasePipelineStage {
       prompt.id
     );
 
-    const toolsSkipped = filterResult.skippedManual;
     const toolsPendingConfirmation = filterResult.pendingConfirmation.map((t) => t.toolId);
 
-    // Log skipped and pending tools
-    if (toolsSkipped.length > 0) {
-      context.diagnostics.info(
-        this.name,
-        `Explicit-trigger tools skipped: ${toolsSkipped.join(', ')}`
-      );
-    }
+    // Log pending tools
     if (toolsPendingConfirmation.length > 0) {
       context.diagnostics.info(
         this.name,
-        `Confirm mode tools pending: ${toolsPendingConfirmation.join(', ')}`
+        `Tools awaiting confirmation: ${toolsPendingConfirmation.join(', ')}`
       );
     }
 
@@ -165,9 +157,6 @@ export class ScriptExecutionStage extends BasePipelineStage {
     // Store results in pipeline state using centralized initialization
     const scripts = context.ensureScriptState();
     scripts.results = scriptResults;
-    if (toolsSkipped.length > 0) {
-      scripts.toolsSkipped = toolsSkipped;
-    }
     if (toolsPendingConfirmation.length > 0) {
       scripts.toolsPendingConfirmation = toolsPendingConfirmation;
     }
@@ -190,7 +179,6 @@ export class ScriptExecutionStage extends BasePipelineStage {
 
     this.logExit({
       executed: scriptResults.size,
-      skipped: toolsSkipped.length,
       pending: toolsPendingConfirmation.length,
       autoApproved: autoApprovedTools.length,
       validationFailed: validationErrors.length > 0,

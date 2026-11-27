@@ -13,9 +13,8 @@
  * NOT the same thing as `validate:no-legacy-sidecars`, despite the plan that commissioned this
  * guard proposing the filename `validate-no-llm-sidecar.js`. In this repo "sidecar" already means
  * a JSON state file that SQLite replaced, and that guard forbids file-path shapes. Two guards
- * whose names differ by one word while forbidding unrelated things is the homonym trap that
- * `claude/no-deprecated-automation-mode` documents avoiding (it scopes narrowly because `mode` is
- * one of this repo's heaviest homonyms), so this one is named for what it forbids: an LLM client.
+ * whose names differ by one word while forbidding unrelated things is a homonym trap, so this one
+ * is named for what it forbids: an LLM client.
  *
  * SCOPE is the shipping surface (`src/`, `../cli/src`) — not `tests/`. Several tests name the
  * retired symbols deliberately, in assertions that pin their ABSENCE

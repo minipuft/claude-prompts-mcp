@@ -382,9 +382,7 @@ export interface ScriptState {
   results?: Map<string, ScriptExecutionResult>;
   /** Results from auto-executed MCP tools, keyed by script tool ID */
   autoExecuteResults?: Map<string, ToolResponse>;
-  /** Tool IDs skipped due to mode: manual (without explicit request) */
-  toolsSkipped?: string[];
-  /** Tool IDs awaiting user confirmation (mode: confirm) */
+  /** Tool IDs awaiting user confirmation (`confirm: true`) */
   toolsPendingConfirmation?: string[];
   /** Structured confirmation response when tools require user approval */
   confirmationRequired?: ConfirmationRequired;

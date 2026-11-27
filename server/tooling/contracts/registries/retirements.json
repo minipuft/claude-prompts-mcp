@@ -108,6 +108,42 @@
       "forgetAfter": "2027-06-01",
       "docPattern": null,
       "docPatternReason": "the retired spelling is the absence of a key, which no text search can find; its pre-5.0 keys are named only in the refusal's own table"
+    },
+    {
+      "id": "skills-sync-exports-list",
+      "kind": "config-key",
+      "retired": "the top-level `exports` key (a list of keys, `all`, or a `user`/`project` map)",
+      "replacement": "a `registrations` map in skills-sync.yaml, keyed by client id, each client set to `all` or to `user` and `project` lists of `prompt:<category>/<id>` keys",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "^\\s*exports:\\s*(?:all|\\[.*)?\\s*$"
+    },
+    {
+      "id": "script-tool-mode",
+      "kind": "resource-field",
+      "retired": "the `mode` field of a tool.yaml `execution` block (`auto`, `manual` or `confirm`)",
+      "replacement": "`trigger: explicit` for `mode: manual`, `confirm: true` for `mode: confirm`, and no field for `mode: auto`, which is the default",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "\\bmode:\\s*['\"]?(?:auto|manual|confirm)\\b"
+    },
+    {
+      "id": "script-tool-confidence",
+      "kind": "resource-field",
+      "retired": "a numeric `confidence` in a tool.yaml `execution` block",
+      "replacement": "`strict: true` to match only when every required parameter is present, or `strict: false`, the default, to match when any is; `trigger` decides when a tool runs",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "\\bconfidence:\\s*[01](?:\\.\\d+)?\\b"
+    },
+    {
+      "id": "script-tool-trigger-parameter-match",
+      "kind": "resource-field",
+      "retired": "the `parameter_match` trigger of a tool.yaml `execution` block",
+      "replacement": "`trigger: schema_match`",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "\\bparameter_match\\b"
     }
   ]
 }

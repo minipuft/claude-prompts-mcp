@@ -289,30 +289,6 @@ export default [
   // Prettier config (disables conflicting rules)
   prettierConfig,
 
-  // Lifecycle annotations required for guarded runtime files
-  // Replaces scripts/validate-no-execution-mode.js, deleted 2026-08-06 (row 1.4).
-  //
-  // The script ripgrepped `-w -i 'mode'` over these paths, so it matched comments, prose and
-  // string literals as well as code — which is where most of its allowlist came from. This rule
-  // reads the AST, so prose cannot match and those entries have no successor. Measured 2026-08-06
-  // before the port: 46 text hits in scope and 10 allowlist entries, of which 3 were not
-  // load-bearing — two named `scripts/` and `package.json`, which the script's own SCOPE never
-  // visited, and `non-strict mode` was already covered by the `strict mode` entry. What survives
-  // the port is the deprecation fold, expressed below as `ignores` rather than as rule options.
-  //
-  // RETIREMENT: when script authors can no longer be carrying pre-migration YAML, delete the
-  // transform in core/script-schema.ts, the migration branch in core/script-definition-loader.ts,
-  // and these two `ignores` entries in the same change.
-  {
-    files: ['src/modules/automation/**/*.ts', 'src/shared/types/automation.ts'],
-    ignores: [
-      'src/modules/automation/core/script-schema.ts',
-      'src/modules/automation/core/script-definition-loader.ts',
-    ],
-    plugins: { claude: claudePlugin },
-    rules: { 'claude/no-deprecated-automation-mode': 'error' },
-  },
-
   {
     // `max-lines` off for generated contract projections ONLY.
     //

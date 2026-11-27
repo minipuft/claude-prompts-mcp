@@ -15,6 +15,8 @@ import { validateGateSchema } from '../../../src/engine/gates/core/gate-schema.j
 import { ConfigLoader } from '../../../src/infra/config/index.js';
 import { TransportRouter } from '../../../src/infra/http/transport/index.js';
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
+import { ScriptToolDefinitionLoader } from '../../../src/modules/automation/core/script-definition-loader.js';
+import { runSkillsSyncCommand } from '../../../src/modules/skills-sync/service.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
 import { listRetirements } from '../../../src/shared/utils/retirement-notice.js';
 import { withResourceLocations } from '../../helpers/resource-locations.js';
@@ -100,6 +102,40 @@ function workspaceWithRootPrompt(scratch: string): string {
   return workspace;
 }
 
+/**
+ * Loads a prompt holding two tools, one carrying `executionYaml` under `execution:` and one
+ * written in the current form, through the loader the server uses. Returns the reason the first
+ * was refused; throws if it loaded, or if the current-form sibling did not.
+ */
+function scriptToolRefusal(scratch: string, executionYaml: string): string {
+  const promptDir = path.join(scratch, 'prompts', 'demo', 'hello');
+  const toolYaml = (id: string, execution: string): string =>
+    `id: ${id}\nname: ${id}\nscript: script.py\nruntime: python\nexecution:\n${execution}`;
+  for (const [id, execution] of [
+    ['retired_probe', executionYaml],
+    ['current_probe', '  trigger: explicit\n  confirm: false\n  strict: true\n'],
+  ] as const) {
+    const toolDir = path.join(promptDir, 'tools', id);
+    mkdirSync(toolDir, { recursive: true });
+    writeFileSync(path.join(toolDir, 'tool.yaml'), toolYaml(id, execution), 'utf8');
+  }
+
+  const stderr = jest.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  try {
+    const report = new ScriptToolDefinitionLoader({
+      enableCache: false,
+    }).loadAllToolsForPromptDetailed(promptDir, 'hello');
+    const refused = report.failures.find((failure) => failure.toolId === 'retired_probe');
+    if (refused === undefined) throw new Error('the loader accepted the retired spelling');
+    if (report.tools.map((tool) => tool.id).join() !== 'current_probe') {
+      throw new Error('the current-form tool next to the refused one did not load');
+    }
+    return refused.reason;
+  } finally {
+    stderr.mockRestore();
+  }
+}
+
 const DRIVERS: Readonly<Record<string, Driver>> = {
   'env-mcp-resources-path': (scratch) => {
     const locations = withResourceLocations();
@@ -146,6 +182,46 @@ const DRIVERS: Readonly<Record<string, Driver>> = {
     });
     return rejectedMessage(() => new ConfigLoader(configPath).loadConfig());
   },
+  'skills-sync-exports-list': (scratch) => {
+    const none = { prompt: [], gate: [], framework: [], style: [] };
+    writeFileSync(
+      path.join(scratch, 'skills-sync.yaml'),
+      'exports:\n  - prompt:examples/alpha\n',
+      'utf8'
+    );
+    return rejectedMessage(() =>
+      runSkillsSyncCommand(
+        { command: 'export', client: 'claude-code', preview: true },
+        { log: () => {}, warn: () => {}, error: () => {} },
+        {
+          packageRoot: scratch,
+          workspace: undefined,
+          runtimeStateDir: scratch,
+          serverConfigPath: path.join(scratch, 'config.json'),
+          sourceRoots: none,
+          writeRoots: { prompt: scratch, gate: scratch, framework: scratch, style: scratch },
+          bundledRoots: {
+            prompt: undefined,
+            gate: undefined,
+            framework: undefined,
+            style: undefined,
+          },
+        }
+      )
+    );
+  },
+  'script-tool-mode': (scratch) => {
+    const refusals = ['auto', 'manual', 'confirm'].map((value, index) =>
+      scriptToolRefusal(path.join(scratch, `mode-${index}`), `  mode: ${value}\n`)
+    );
+    if (refusals.some((refusal) => refusal !== refusals[0])) {
+      throw new Error('the refusal differs between mode values');
+    }
+    return refusals[0] as string;
+  },
+  'script-tool-confidence': (scratch) => scriptToolRefusal(scratch, '  confidence: 0.8\n'),
+  'script-tool-trigger-parameter-match': (scratch) =>
+    scriptToolRefusal(scratch, '  trigger: parameter_match\n'),
   'transport-sse': () => thrownMessage(() => TransportRouter.determineTransport('sse')),
   'gate-shell-command-string': () =>
     gateErrors({ type: 'shell_verify', shell_command: 'npm test' }),

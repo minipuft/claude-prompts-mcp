@@ -442,10 +442,6 @@ export interface ToolDetectionServicePort {
   ): ToolDetectionMatch[];
 }
 
-/**
- * Execution mode service interface (engine/ contract).
- * Concrete: modules/automation/execution/tool-trigger-filter.ts ToolTriggerFilter
- */
 /** Matches split by whether the tool opts into validation-gated auto-approval. */
 export interface ToolAutoApprovePartition {
   /** Tools declaring `execution.autoApproveOnValid` — approved by their own validation output. */
@@ -454,6 +450,10 @@ export interface ToolAutoApprovePartition {
   readonly normal: ToolDetectionMatch[];
 }
 
+/**
+ * Trigger and confirmation filtering interface (engine/ contract).
+ * Concrete: modules/automation/execution/tool-trigger-filter.ts ToolTriggerFilter
+ */
 export interface ToolTriggerFilterPort {
   partitionAutoApprove(
     matches: ToolDetectionMatch[],

@@ -18,6 +18,20 @@
 import { z } from 'zod/v4';
 
 import { SUPPORTED_RUNTIMES } from '#shared/types/automation.js';
+import { retirementNotice, type RetirementNotice } from '#shared/utils/retirement-notice.js';
+
+/** The refusal sentence for a retired field, composed from its ledger entry. */
+function retiredFieldRefusal(notice: RetirementNotice): string {
+  return `${notice.retired} is no longer accepted (retired in ${notice.refusedIn}); use ${notice.replacement}`;
+}
+
+/**
+ * A field a tool.yaml no longer accepts. Declared only so a document carrying it is refused with
+ * the ledger's replacement; the schema would otherwise drop an unknown key without a word.
+ */
+function retiredField(notice: RetirementNotice): z.ZodOptional<z.ZodNever> {
+  return z.never({ error: () => retiredFieldRefusal(notice) }).optional();
+}
 
 // ============================================================================
 // Trigger Type Schema (Deterministic - Modern Standards)
@@ -33,55 +47,27 @@ import { SUPPORTED_RUNTIMES } from '#shared/types/automation.js';
  * - explicit: Only runs when user explicitly names the tool (tool:<id>)
  * - always: Runs on every prompt execution (logging, metrics, setup)
  * - never: Tool is defined but intentionally disabled (WIP, conditional)
- *
- * Note: 'parameter_match' is deprecated, automatically transformed to 'schema_match'.
  */
-export const TriggerTypeSchema = z
-  .enum(['schema_match', 'explicit', 'always', 'never', 'parameter_match'])
-  .transform((val) => {
-    if (val === 'parameter_match') {
-      console.warn(
-        "[ScriptSchema] DEPRECATED: 'parameter_match' trigger is deprecated. Use 'schema_match' instead."
-      );
-      return 'schema_match' as const;
-    }
-    return val;
-  });
-
-export type TriggerTypeYaml = 'schema_match' | 'explicit' | 'always' | 'never';
+export const TriggerTypeSchema = z.enum(['schema_match', 'explicit', 'always', 'never'], {
+  error: (issue) =>
+    issue.input === 'parameter_match'
+      ? retiredFieldRefusal(retirementNotice('script-tool-trigger-parameter-match'))
+      : undefined,
+});
 
 // ============================================================================
-// Execution Mode Schema (DEPRECATED)
-// ============================================================================
-
-/**
- * @deprecated ExecutionModeSchema is deprecated.
- * Use `trigger: explicit` instead of `mode: manual`, and `confirm: true` instead of `mode: confirm`.
- * This schema is preserved only for backwards compatibility during migration.
- */
-export const ExecutionModeSchema = z.enum(['auto', 'manual', 'confirm']).default('auto');
-
-/** @deprecated Use trigger + confirm instead */
-export type ExecutionModeYaml = z.infer<typeof ExecutionModeSchema>;
-
-// ============================================================================
-// Execution Config Schema (Consolidated: trigger + confirm)
+// Execution Config Schema (trigger + confirm + strict)
 // ============================================================================
 
 /**
  * Execution configuration for script tools.
  *
- * Configuration precedence (new consolidated system):
  * - `trigger`: Controls WHEN the tool activates (schema_match | explicit | always | never)
  * - `confirm`: Controls WHETHER to ask for confirmation before executing
  * - `strict`: Controls HOW schema matching works (any vs all required params)
  *
- * Migration from deprecated `mode` field:
- * - mode: auto    → (default, no field needed)
- * - mode: manual  → trigger: explicit
- * - mode: confirm → confirm: true
- *
- * Note: Both 'mode' and 'confidence' fields are DEPRECATED and automatically migrated.
+ * `mode` and a numeric `confidence` are retired fields: each is refused with its ledger
+ * replacement instead of being dropped.
  */
 export const ExecutionConfigSchema = z
   .object({
@@ -115,48 +101,10 @@ export const ExecutionConfigSchema = z
      * - valid: false → show errors, block execution
      */
     autoApproveOnValid: z.boolean().optional().default(false),
-    /**
-     * @deprecated mode is deprecated. Use trigger: explicit instead of mode: manual,
-     * and confirm: true instead of mode: confirm.
-     * This field is accepted for backwards compatibility and automatically migrated.
-     */
-    mode: ExecutionModeSchema.optional().transform((val) => {
-      if (val !== undefined && val !== 'auto') {
-        console.warn(
-          `[ScriptSchema] DEPRECATED: 'mode: ${val}' is deprecated. ` +
-            (val === 'manual' ? "Use 'trigger: explicit' instead." : "Use 'confirm: true' instead.")
-        );
-      }
-      return val;
-    }),
-    /**
-     * @deprecated Numeric confidence is deprecated. Use trigger types instead.
-     * This field is accepted for backwards compatibility but ignored.
-     */
-    confidence: z
-      .number()
-      .min(0)
-      .max(1)
-      .optional()
-      .transform((val) => {
-        if (val !== undefined) {
-          console.warn(
-            '[ScriptSchema] DEPRECATED: numeric confidence is deprecated and ignored. ' +
-              "Use 'trigger' and 'strict' for deterministic matching."
-          );
-        }
-        return undefined;
-      }),
+    mode: retiredField(retirementNotice('script-tool-mode')),
+    confidence: retiredField(retirementNotice('script-tool-confidence')),
   })
   .optional();
-
-export type ExecutionConfigYaml = {
-  trigger?: TriggerTypeYaml;
-  confirm?: boolean;
-  strict?: boolean;
-  confirmMessage?: string;
-  autoApproveOnValid?: boolean;
-};
 
 // ============================================================================
 // Script Runtime Schema
@@ -265,96 +213,12 @@ export function validateScriptToolSchema(
     );
   }
 
-  // Check for deprecated field usage (already logged by transforms, but add to warnings)
-  const raw = definition as Record<string, unknown>;
-  const rawExec = raw['execution'];
-  if (rawExec !== null && rawExec !== undefined && typeof rawExec === 'object') {
-    const exec = rawExec as Record<string, unknown>;
-    if (exec['confidence'] !== undefined) {
-      warnings.push(
-        "Numeric 'confidence' field is deprecated and ignored. Use 'trigger' and 'strict' instead."
-      );
-    }
-    if (exec['trigger'] === 'parameter_match') {
-      warnings.push("'parameter_match' trigger is deprecated. Use 'schema_match' instead.");
-    }
-  }
-
   return {
     valid: true,
     errors,
     warnings,
     normalized,
   };
-}
-
-/**
- * Parse and normalize execution config from YAML.
- *
- * Handles migration from deprecated `mode` field:
- * - mode: manual  → trigger: explicit
- * - mode: confirm → confirm: true
- *
- * @param raw - Raw execution config from YAML
- * @returns Normalized execution config (new schema: trigger + confirm)
- */
-export function normalizeExecutionConfig(raw: unknown): ExecutionConfigYaml {
-  if (raw === null || raw === undefined || typeof raw !== 'object') {
-    return {
-      trigger: 'schema_match',
-      confirm: true,
-      strict: false,
-      autoApproveOnValid: false,
-    };
-  }
-
-  const result = ExecutionConfigSchema.safeParse(raw);
-  if (!result.success) {
-    return {
-      trigger: 'schema_match',
-      confirm: true,
-      strict: false,
-      autoApproveOnValid: false,
-    };
-  }
-
-  // Result data has transforms applied (confidence removed, parameter_match -> schema_match)
-  // After successful parse, result.data is guaranteed to be defined - use non-null assertion
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- Safe: result.success guarantees data is defined
-  const data = result.data!;
-
-  // Start with new field values
-  let trigger = data.trigger ?? 'schema_match';
-  let confirm = data.confirm ?? true;
-
-  // Migrate deprecated mode field if present
-  if (data.mode !== undefined && data.mode !== 'auto') {
-    if (data.mode === 'manual') {
-      // mode: manual → trigger: explicit (unless trigger already set)
-      if (data.trigger === undefined) {
-        trigger = 'explicit';
-      }
-    } else if (data.mode === 'confirm') {
-      // mode: confirm → confirm: true (unless confirm already set)
-      if (data.confirm === undefined) {
-        confirm = true;
-      }
-    }
-  }
-
-  const config: ExecutionConfigYaml = {
-    trigger,
-    confirm,
-    strict: data.strict ?? false,
-    autoApproveOnValid: data.autoApproveOnValid ?? false,
-  };
-
-  // Only add confirmMessage if it's a non-empty string
-  if (data.confirmMessage !== undefined && data.confirmMessage !== '') {
-    config.confirmMessage = data.confirmMessage;
-  }
-
-  return config;
 }
 
 /**

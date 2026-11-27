@@ -625,25 +625,6 @@ Full process capabilities by design. The trust boundary is _who writes the scrip
 
 ---
 
-## Migration from Deprecated Config
-
-### `mode` → `trigger` / `confirm`
-
-| Old             | New                 |
-| --------------- | ------------------- |
-| `mode: auto`    | Remove (default)    |
-| `mode: manual`  | `trigger: explicit` |
-| `mode: confirm` | `confirm: true`     |
-
-### `confidence` → `strict`
-
-| Old               | New             |
-| ----------------- | --------------- |
-| `confidence: 0.8` | `strict: false` |
-| `confidence: 1.0` | `strict: true`  |
-
----
-
 ## Inline Script References
 
 Execute scripts inline during template rendering using `{{script:id}}` syntax. Unlike auto-execute patterns, inline references resolve **before** template processing, making results available immediately.

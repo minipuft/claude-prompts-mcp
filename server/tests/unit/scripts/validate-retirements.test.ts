@@ -291,6 +291,50 @@ describe('validate:retirements', () => {
     });
   });
 
+  describe('the generated page', () => {
+    const PAGE_ENTRY = {
+      id: 'page-entry',
+      kind: 'config-key' as const,
+      retired: 'old.key',
+      replacement: 'new.key',
+      refusedIn: '6.0.0',
+      forgetAfter: '2027-06-01',
+      docPattern: null,
+      docPatternReason: 'planted',
+    };
+
+    it('shows a described spelling as prose and never nests one code span in another', () => {
+      const described = {
+        ...PAGE_ENTRY,
+        retired: 'the top-level `exports` key (`all`, or a `user`/`project` map)',
+        replacement:
+          'lists of `prompt:<category>/<id>` keys under <client>, in <workspace>/resources/<type>/',
+      };
+      const row = renderUpgradingPage([described])
+        .split('\n')
+        .find((line) => line.includes('exports'));
+
+      expect(row).toContain('| the top-level `exports` key (`all`, or a `user`/`project` map) ');
+      expect(row).toContain('`prompt:<category>/<id>`');
+      expect(row).toContain('under `<client>`, in `<workspace>/resources/<type>/`');
+    });
+
+    it('shows a bare identifier of a literal kind as code', () => {
+      const bare = { ...PAGE_ENTRY, retired: 'prompts.directory' };
+
+      expect(renderUpgradingPage([bare])).toContain('| `prompts.directory` ');
+    });
+
+    it('is already formatted the way the format gate formats it', async () => {
+      const prettier = await import('prettier');
+      const pagePath = path.join(REPO_ROOT, UPGRADING_PAGE);
+      const page = renderUpgradingPage(listRetirements());
+      const options = await prettier.resolveConfig(pagePath);
+
+      expect(await prettier.format(page, { ...options, filepath: pagePath })).toBe(page);
+    });
+  });
+
   describe('check 4: expiry', () => {
     const expired = { ...ENTRY, refusedIn: '5.0.0', forgetAfter: '2026-11-01' };
 
