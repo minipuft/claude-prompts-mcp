@@ -14,9 +14,7 @@ export function renderPromptEngineGuide(goal?: string): string {
   const parameterList = selectGuideParameters(normalizedGoal);
   const commandList = promptEngineMetadata.data.commands;
   const usagePatterns = promptEngineMetadata.data.usagePatterns ?? [];
-  const fullParameterCatalog = promptEngineMetadata.data.parameters.filter(
-    (param) => param.status !== 'deprecated'
-  );
+  const fullParameterCatalog = promptEngineMetadata.data.parameters;
   const sections: string[] = [];
 
   sections.push('🧭 **Prompt Engine Guide**');
@@ -85,9 +83,7 @@ export function renderPromptEngineGuide(goal?: string): string {
 
 function selectGuideParameters(goal: string): ParameterDescriptor[] {
   const normalizedGoal = goal.toLowerCase();
-  const parameters = promptEngineMetadata.data.parameters.filter(
-    (param) => param.status !== 'deprecated'
-  );
+  const parameters = promptEngineMetadata.data.parameters;
 
   if (!normalizedGoal) {
     return parameters.slice(0, Math.min(8, parameters.length));
@@ -153,8 +149,6 @@ function describePromptEngineStatus(status: string): string {
       return `⚠️ ${status}`;
     case 'untested':
       return '🧪 Untested';
-    case 'deprecated':
-      return '🛑 Deprecated';
     default:
       return status;
   }

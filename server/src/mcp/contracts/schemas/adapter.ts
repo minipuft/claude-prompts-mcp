@@ -11,7 +11,6 @@ import type { ParameterDescriptor, CommandDescriptor } from '../../metadata/defi
 
 // Map SSOT status to action-metadata status vocabulary.
 function mapStatus(status: ParameterDefinition['status']): ParameterDescriptor<string>['status'] {
-  if (status === 'deprecated') return 'deprecated';
   if (status === 'hidden') return 'hidden';
   if (status === 'needs-validation') return 'needs-validation';
   if (status === 'experimental') return 'experimental';

@@ -324,8 +324,6 @@ export class PromptResourceHandler implements PromptResourceHandlerPort {
         return '🗺️ Planned';
       case 'untested':
         return '🧪 Untested';
-      case 'deprecated':
-        return '🛑 Deprecated';
       default:
         return `⚠️ ${action.status}`;
     }

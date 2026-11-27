@@ -11,7 +11,7 @@ import type { ExecutionModifier, ExecutionModifiers } from '../../types.js';
 export interface CommandParseResultBase<TOperators = unknown, TPlan = unknown> {
   promptId: string;
   rawArgs: string;
-  format: 'simple' | 'json' | 'structured' | 'legacy' | 'symbolic';
+  format: 'simple' | 'json' | 'structured' | 'symbolic';
   confidence: number;
   commandType?: 'single' | 'chain';
   modifiers?: ExecutionModifiers;

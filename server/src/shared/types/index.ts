@@ -198,7 +198,7 @@ export interface ToolDescriptionsConfig {
   activeFramework?: string;
   /** Active framework's type (e.g. 'CAGEERF'). Preferred overlay lookup key. */
   activeFrameworkType?: string;
-  generatedFrom?: 'fallback' | 'legacy' | 'defaults' | string;
+  generatedFrom?: 'fallback' | 'defaults' | string;
   generatedAt?: string;
 }
 
