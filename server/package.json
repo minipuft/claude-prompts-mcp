@@ -142,6 +142,8 @@
     "typecheck:committed": "node scripts/typecheck-committed.js",
     "validate:operator-registry-drift": "node scripts/validate-operator-registry-drift.js",
     "validate:operator-registry-drift:self-test": "node scripts/validate-operator-registry-drift.js --self-test",
+    "validate:retirements": "tsx scripts/validate-retirements.ts",
+    "retirements:list": "tsx scripts/validate-retirements.ts --list",
     "validate:phase-header-drift": "node scripts/validate-phase-header-drift.js",
     "validate:phase-header-drift:self-test": "node scripts/validate-phase-header-drift.js --self-test",
     "validate:plan-row-tracking": "node scripts/validate-plan-row-tracking.js",

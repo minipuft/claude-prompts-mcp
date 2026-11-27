@@ -71,6 +71,16 @@ jobs:
           echo "Full Node validation: \`${{ steps.changes.outputs.full }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "Python validation: \`${{ steps.changes.outputs.python }}\`" >> "$GITHUB_STEP_SUMMARY"
 
+      # Advisory, never a gate: a retirement ledger entry passing its forgetAfter date is a fact
+      # about the repository, and only a separate deleting change clears it, so a date must not
+      # turn every open PR red. `validate:retirements` is what fails, at a major release cut after
+      # the date. In this job because it runs on every route before any install, and the script
+      # needs none. `continue-on-error` keeps even a crash from failing the classifier.
+      - name: Warn when a retired spelling is past its forgetAfter date (scripts/warn-retirement-expiry.mjs)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: node scripts/warn-retirement-expiry.mjs
+
   # ============================================================
   # Stage 1: Fast validation (single Node LTS)
   # Deterministic checks that don't depend on Node version

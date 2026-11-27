@@ -363,6 +363,13 @@ export const SUITE = [
     converse: 'unexamined',
   },
   {
+    script: 'validate:retirements',
+    io: 'read',
+    reads: ['file', 'walk'],
+    converse:
+      'CHECKED both ways for check 1 — an entry with no `retirementNotice` site fails, and a site whose literal id names no entry (or that passes no literal) fails; check 2 likewise fails an entry with no driver and a driver for an id the ledger does not hold. `tests/unit/scripts/validate-retirements.test.ts` plants each case and a commented-out call that must not count as a site. Check 4 fails only past `forgetAfter` under a higher major, and only warns under the same major. NOT checked: that a driver reaches the real boundary rather than a stand-in; the driver test asserts the refusal carries the entry text, and review owns the rest',
+  },
+  {
     script: 'validate:phase-header-drift',
     io: 'read',
     reads: ['file', 'walk'],
