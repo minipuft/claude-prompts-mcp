@@ -1,9 +1,6 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   description: "Renovate Bot configuration for automated dependency updates",
-
-  // Start from Renovate's recommended policy, then opt into the targeted parts of
-  // config:best-practices that match this repository's release and support model.
   extends: [
     "config:recommended",
     ":configMigration",
@@ -12,38 +9,13 @@
     ":preserveSemverRanges",
     ":maintainLockFilesWeekly",
   ],
-
-  // Repository-specific settings
   timezone: "UTC",
-  // Renamed from `baseBranches` upstream. `--strict` in the validator workflow treats a
-  // pending config migration as a failure, so the deprecation surfaces here instead of
-  // as a warning nobody reads.
   baseBranchPatterns: ["main"],
-
-  // Limit concurrent PRs to avoid overwhelming maintainers
   prConcurrentLimit: 5,
   prCreation: "immediate",
   prHourlyLimit: 2,
-
-  // Regular updates run in a six-hour hosted-app window. Vulnerability alerts
-  // override this schedule below.
   schedule: ["* 0-5 * * 1"],
-
-  // Renovate's default (`true`) still updates EXISTING branches outside the schedule: a push
-  // to main rebased every open Renovate branch that fell behind or conflicted, at any hour.
-  // `false` stops that, so open Renovate PRs change only inside the Monday 00:00-05:59 UTC
-  // window (a rebase requested from the Dependency Dashboard or the `rebase` label still
-  // runs). The same switch holds back the two automerging rules below, which keep
-  // `rebaseWhen: "behind-base-branch"`: an automerge candidate is rebased onto a new main,
-  // and so can merge, only inside the window. A conflicted branch also waits for the window.
-  // Vulnerability alerts and the MCP SDK rule carry their own `at any time` schedule.
   updateNotScheduled: false,
-
-  // `ignorePaths` replaces the list `config:recommended` brings through `:ignoreModulesAndTests`
-  // rather than adding to it, so that list is spelled out here unchanged. `assets/demos/**` is the
-  // one addition: the hero recording's fixture project (`assets/demos/src/hero/fixture/`) is a
-  // stage prop, not a dependency anyone installs, and `validate-renovate-extraction.js` pins the
-  // npm package files to the four real ones.
   ignorePaths: [
     "**/node_modules/**",
     "**/bower_components/**",
@@ -55,47 +27,18 @@
     "**/__fixtures__/**",
     "assets/demos/**",
   ],
-
-  // Rebase a branch only when it conflicts, not on every main merge. The default `auto`
-  // resolves to `behind-base-branch` here because `main` requires up-to-date branches, so
-  // every merge to main re-ran the full CI on every open Renovate branch (148 CI runs on 7
-  // Renovate branches against 33 on non-bot branches, 2026-09-25 onward). The rebase now
-  // happens once, when a PR is actually updated for merge.
-  //
-  // Not in the shared preset (`validate:renovate-preset-agreement` compares only keys the
-  // preset sets), so this is a local addition, not a declared override. The two automerging
-  // rules below keep `behind-base-branch`: Renovate documents that `conflicted` plus
-  // required up-to-date branches makes automerge impossible once a PR falls behind without
-  // conflicting, which would strand them.
   rebaseWhen: "conflicted",
-
-  // Renovate owns the merge decision for the narrowly eligible rules below. GitHub
-  // platform automerge can merge while Renovate's stability-days status is pending,
-  // so it must remain disabled for minimumReleaseAge to be an effective guard.
-  // The global false remains the fail-closed default for every other update.
   platformAutomerge: false,
   automerge: false,
   automergeType: "pr",
   automergeStrategy: "squash",
-
-  // PR title and body formatting. Server runtime dependencies are overridden to
-  // `fix` below because Release Please treats them as patch-release inputs.
   semanticCommits: "enabled",
   semanticCommitType: "chore",
   semanticCommitScope: "deps",
   commitMessageAction: "update",
   commitMessageTopic: "{{depName}}",
   commitMessageExtra: "to {{#if isPinDigest}}{{{newDigestShort}}}{{else}}{{#if isMajor}}{{prettyNewMajor}}{{else}}{{#if isSingleVersion}}{{prettyNewVersion}}{{else}}{{newValue}}{{/if}}{{/if}}{{/if}}",
-
-  // Keep one repository label on every dependency PR. Matched rules append only
-  // labels that exist in the repository.
   labels: ["dependencies"],
-
-  // Package file detection: no `enabledManagers` allowlist on purpose.
-  // This config was inert until 2026-07-31, so its `["npm"]` allowlist had never
-  // taken effect. Activating it as written would have silently dropped the `nodenv`
-  // manager (.node-version, the SSOT every workflow now resolves Node from) and the
-  // `github-actions` manager. Auto-detection is what has actually been running; keep it.
   packageRules: [
     {
       description: "Default dependency PRs remain maintenance-only",
@@ -137,17 +80,9 @@
       groupName: null,
       reviewers: ["minipuft"],
       automerge: false,
-      // A major update gets no branch or PR until its checkbox is ticked in the Dependency
-      // Dashboard issue, so it costs no CI run until someone chooses to review it. Only a
-      // branch that does not exist yet waits; a major PR already open is unaffected.
-      // Package rules apply after `vulnerabilityAlerts`, so a vulnerability fix whose version
-      // jump is itself a major waits for the checkbox too; Renovate has no matcher to exempt it.
       dependencyDashboardApproval: true,
     },
     {
-      // TypeScript 7 replaces the JavaScript compiler API used by this repository's
-      // test and architecture tooling. Keep accepting 6.x updates, but do not create
-      // another 7.x PR until every removal condition in the note below is satisfied.
       description: "TypeScript - require manual review",
       matchPackageNames: ["typescript"],
       allowedVersions: "<7.0.0",
@@ -169,9 +104,6 @@
       ],
     },
     {
-      // The server has completed its TypeScript 6 migration, but the standalone CLI
-      // still fails its hosted validation on 6. Keep CLI patches on 5.x until a
-      // dedicated migration makes its typecheck, build, and integration suite pass.
       description: "CLI TypeScript 6 requires a dedicated migration",
       matchPackageNames: ["typescript"],
       matchFileNames: ["cli/package.json"],
@@ -234,14 +166,6 @@
       automerge: false,
     },
     {
-      // `validate:standards-pins` requires four references to name ONE version: this
-      // action's pin, the doc link in docs/guides/release-process.md, the `$schema` in
-      // plan-retirement.config.json, and the npm tarball in server/package.json and
-      // server/package-lock.json. Renovate can rewrite only the action pin, so a PR for it
-      // alone can never pass that gate. The version is bumped by hand, across all of them
-      // in one commit. Nothing reports when this repository falls behind: the fleet audit in
-      // minipuft/repository-standards audits this repository only for its delivery contract,
-      // not for the version of the standards it consumes.
       description: "repository-standards action - bumped by hand across every reference",
       matchManagers: ["github-actions"],
       matchPackageNames: ["minipuft/repository-standards"],
@@ -254,31 +178,7 @@
       groupName: "Python validation tools",
       automerge: false,
     },
-    // The zod <4.0.0 hold was removed on 2026-08-01, together with the migration it was
-    // deferring. What satisfied it: @modelcontextprotocol/sdk 1.30.0 accepts ^3.25 || ^4.0,
-    // all 16 importers moved to `zod/v4`, and the emitted MCP inputSchema is now pinned by
-    // tests/snapshots/mcp-input-schemas.json so a converter change cannot land unnoticed.
-    //
-    // The upgrade is not a version bump: the SDK picks its JSON Schema converter from the
-    // zod major (zod-json-schema-compat.js:19-28), so bumping zod rewrites the published
-    // tool surface. That snapshot is what makes future zod majors reviewable instead of
-    // silent — do not re-add a blanket hold, let the snapshot diff fail the PR.
-    // The express <5.0.0 hold was removed on 2026-08-01. It was dead config contradicted
-    // by the repo it governed: server/package.json already declares express ^5.2.1 and
-    // @types/express ^5.0.6, and @modelcontextprotocol/sdk itself depends on express
-    // ^5.2.1. The migration the hold existed to defer had already happened, so all the
-    // rule still did was block v5.x PATCH updates — including any security fix.
-    //
-    // Both historical zod/express holds are gone. The guarded TypeScript holds above
-    // are active migrations with explicit removal evidence; do not conflate them with
-    // the retired compatibility pins.
   ],
-
-  // Vulnerability alerts
-  // Renovate is the sole remediation path since Dependabot security updates were
-  // disabled (2026-07-31). Dependabot *alerts* stay on — Renovate reads that feed
-  // to populate these. `minimumReleaseAge: null` overrides the global 3-day soak,
-  // which would otherwise delay every CVE fix by three days.
   vulnerabilityAlerts: {
     enabled: true,
     automerge: false,
@@ -286,55 +186,30 @@
     minimumReleaseAge: null,
     addLabels: ["security", "vulnerability"],
   },
-
-  // Dependency dashboard
-  dependencyDashboard: true,
-  dependencyDashboardTitle: "📦 Dependency Updates Dashboard",
-  dependencyDashboardHeader: "This dashboard tracks all pending dependency updates. Vulnerability alerts run immediately; regular updates and lock maintenance run Mondays from 00:00 through 05:59 UTC.",
+  dependencyDashboard: {
+    enabled: true,
+    title: "📦 Dependency Updates Dashboard",
+    header: "This dashboard tracks all pending dependency updates. Vulnerability alerts run immediately; regular updates and lock maintenance run Mondays from 00:00 through 05:59 UTC.",
+  },
   dependencyDashboardApproval: false,
-
-  // Stability - wait for package to stabilize (renamed from stabilityDays)
   minimumReleaseAge: "3 days",
   internalChecksFilter: "strict",
-
-  // Ignore specific packages or update types
   ignoreDeps: [],
   ignoreTests: false,
-
-  // Lockfile maintenance
   lockFileMaintenance: {
     enabled: true,
     schedule: ["* 0-5 * * 1"],
-    // lockFileMaintenance is a synthetic update and has no release timestamp, so
-    // timestamp-required would leave renovate/stability-days pending forever.
-    // Keep the age value so Renovate passes npm --before during the clean lock
-    // regeneration, but allow the synthetic update itself to omit a timestamp.
     minimumReleaseAge: "3 days",
     minimumReleaseAgeBehaviour: "timestamp-optional",
     automerge: true,
     rebaseWhen: "behind-base-branch",
     commitMessageAction: "refresh",
   },
-
-  // PR body template
   prBodyTemplate: "{{{header}}}{{{table}}}{{{notes}}}{{{changelogs}}}{{{configDescription}}}{{{controls}}}{{{footer}}}",
   prBodyColumns: ["Package", "Update", "Type", "Change", "Pending"],
-
-  // Branch naming
   branchPrefix: "renovate/",
   branchConcurrentLimit: 10,
-
   respectLatest: true,
-
-  // Tool versions pinned inside workflow `run:` steps are invisible to every built-in
-  // manager — nothing parses a shell line. MCPB is deliberately absent here because its
-  // exact root devDependency is the sole update path.
-  //
-  // Ruff, Pyrefly, Pytest, and PyYAML had four regex managers here until 2026-08-19. They moved
-  // to requirements-dev.txt, which the built-in `pip_requirements` manager reads — a regex
-  // manager is the fallback for a pin no manager can see, and a pin a developer also cannot
-  // install from is the more expensive half of that bargain. One regex manager remains, for the
-  // genuinely unparseable case: a version inside an `npm install -g` line.
   customManagers: [
     {
       customType: "regex",
