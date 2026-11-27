@@ -23,11 +23,11 @@ exports; near 1, it is a leaf that is cheap to change.
 | `engine-frameworks` | `src/engine/frameworks` | domain | canonical | 0.38 | Loads, validates, selects, and applies reasoning frameworks. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils | cli-shared<br>engine-execution<br>mcp-tools<br>resources<br>runtime |
 | `engine-gates` | `src/engine/gates` | domain | canonical | 0.56 | Selects, enhances, and evaluates quality-gate guidance. | — | — | engine-execution<br>infra-database<br>infra-logging<br>shared-core<br>shared-types<br>shared-utils<br>workflow-ir | cli-shared<br>engine-execution<br>mcp-tools<br>prompts<br>resources<br>runtime<br>skills-sync<br>versioning |
 | `engine-interfaces` | `src/engine/interfaces` | protocol | canonical | — | Contracts exposed by the execution engine to collaborating layers. | — | — | — | — |
-| `infrastructure` | `src/infra` | layer | canonical | 0.39 | Configuration, persistence, transport support, logging, and observability infrastructure. | — | — | — | — |
-| `infra-config` | `src/infra/config` | domain | canonical | 0.71 | Loads and resolves server configuration. | — | `index.ts` | infra-logging<br>shared-types<br>shared-utils | infra-http<br>runtime<br>server-source |
+| `infrastructure` | `src/infra` | layer | canonical | 0.40 | Configuration, persistence, transport support, logging, and observability infrastructure. | — | — | — | — |
+| `infra-config` | `src/infra/config` | domain | canonical | 0.72 | Loads and resolves server configuration. | — | `index.ts` | infra-logging<br>shared-types<br>shared-utils | infra-http<br>runtime<br>server-source |
 | `infra-database` | `src/infra/database` | domain | canonical | 0.49 | Owns SQLite schema, storage adapters, and resource indexing. | — | `index.ts` | cli-shared<br>infra-logging<br>shared-types<br>shared-utils | engine-execution<br>engine-frameworks<br>engine-gates<br>infra-observability<br>runtime |
 | `infra-hooks` | `src/infra/hooks` | adapter | canonical | 0.40 | Integrates server behavior with supported hook surfaces. | — | `index.ts` | shared-types | infra-observability<br>runtime |
-| `infra-http` | `src/infra/http` | protocol | canonical | 0.81 | Provides HTTP infrastructure used by the Streamable HTTP transport. | — | `index.ts` | infra-config<br>infra-logging<br>shared-types | runtime |
+| `infra-http` | `src/infra/http` | protocol | canonical | 0.82 | Provides HTTP infrastructure used by the Streamable HTTP transport. | — | `index.ts` | infra-config<br>infra-logging<br>shared-types<br>shared-utils | runtime |
 | `infra-logging` | `src/infra/logging` | shared | canonical | 0.03 | Provides structured logging primitives and configuration. | — | `index.ts` | shared-types | engine-execution<br>engine-frameworks<br>engine-gates<br>infra-config<br>infra-database<br>infra-http<br>infra-observability<br>runtime<br>server-source |
 | `infra-observability` | `src/infra/observability` | domain | canonical | 0.86 | Provides tracing and operational telemetry infrastructure. | — | — | infra-database<br>infra-hooks<br>infra-logging<br>shared-types<br>shared-utils | runtime |
 | `mcp-boundary` | `src/mcp` | layer | canonical | 0.98 | Model Context Protocol contracts, transports, metadata, and tool adapters. | — | — | — | — |
@@ -47,10 +47,10 @@ exports; near 1, it is a leaf that is cheap to change.
 | `versioning` | `src/modules/versioning` | domain | canonical | 0.36 | Owns version history, comparison, rollback, and resource snapshots. | — | `index.ts` | cli-shared<br>engine-gates<br>prompts<br>resources<br>shared-types<br>shared-utils | cli-shared<br>mcp-tools<br>runtime |
 | `workflow-ir` | `src/modules/workflow-ir` | domain | canonical | 0.33 | Validates and compiles planner-submitted workflow graphs. | `docs/reference/workflow-ir.md` | — | engine-execution<br>shared-types<br>shared-utils | engine-execution<br>engine-gates<br>mcp-tools<br>prompts<br>shared-types |
 | `runtime` | `src/runtime` | runtime | canonical | 0.98 | Application composition and process lifecycle entrypoints. | — | — | automation<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-tools<br>prompts<br>resources<br>shared-core<br>shared-types<br>shared-utils<br>skills-sync<br>text-references<br>versioning | server-source |
-| `shared` | `src/shared` | layer | canonical | 0.05 | Foundation types and pure utilities available to every source layer. | — | — | — | — |
+| `shared` | `src/shared` | layer | canonical | 0.06 | Foundation types and pure utilities available to every source layer. | — | — | — | — |
 | `shared-core` | `src/shared/core` | shared | canonical | 0.33 | Core abstractions shared without importing upper layers. | — | — | shared-types<br>shared-utils | engine-frameworks<br>engine-gates<br>mcp-tools<br>runtime |
 | `shared-types` | `src/shared/types` | shared | canonical | 0.00 | Cross-layer TypeScript contracts and data shapes. | — | `index.ts` | workflow-ir | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-hooks<br>infra-http<br>infra-logging<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>shared-core<br>shared-utils<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
-| `shared-utils` | `src/shared/utils` | shared | canonical | 0.13 | Pure cross-layer utility functions. | — | `index.ts` | shared-types | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>server-source<br>shared-core<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
+| `shared-utils` | `src/shared/utils` | shared | canonical | 0.13 | Pure cross-layer utility functions. | — | `index.ts` | shared-types | automation<br>chains<br>cli-shared<br>engine-execution<br>engine-frameworks<br>engine-gates<br>formatting<br>hot-reload<br>infra-config<br>infra-database<br>infra-http<br>infra-observability<br>mcp-http<br>mcp-metadata<br>mcp-tools<br>prompts<br>resources<br>runtime<br>server-source<br>shared-core<br>skills-sync<br>text-references<br>versioning<br>workflow-ir |
 
 ## Domain ownership
 
@@ -214,6 +214,7 @@ flowchart LR
   module_infra_http --> module_infra_config
   module_infra_http --> module_infra_logging
   module_infra_http -. type .-> module_shared_types
+  module_infra_http --> module_shared_utils
   module_infra_logging --> module_shared_types
   module_infra_observability --> module_infra_database
   module_infra_observability -. type .-> module_infra_hooks

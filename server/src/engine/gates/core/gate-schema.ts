@@ -54,6 +54,17 @@ import type {
 } from '#shared/types/gate-evaluation.js';
 
 import { refuseUndeclaredKey, refuseUnionMismatch } from '#shared/utils/nested-key-refusal.js';
+import { retirementNotice } from '#shared/utils/retirement-notice.js';
+
+/** The type error a non-array `shell_command` reads: the shape, the reason and the fix. */
+function describeShellCommandTypeRefusal(): string {
+  const notice = retirementNotice('gate-shell-command-string');
+  return (
+    `shell_command must be ${notice.replacement}; ${notice.retired} is no longer accepted ` +
+    `(retired in ${notice.refusedIn}): it was handed to \`sh -c\`, so the shell parsed whatever ` +
+    'the gate author wrote. Use ["sh", "-c", "..."] if you genuinely need a shell.'
+  );
+}
 
 // ============================================
 // Standalone Semantic Criterion Schema
@@ -275,10 +286,7 @@ export const GatePassCriteriaSchema = z
         // The type error is what an author migrating a gate actually sees, and zod's
         // default ("expected array, received string") states the shape without the
         // reason or the fix. This is the only surface that reaches them.
-        error:
-          'shell_command must be an argv array, e.g. ["npm", "test"]. A bare string is no ' +
-          'longer accepted: it was handed to `sh -c`, so the shell parsed whatever the gate ' +
-          'author wrote. Use ["sh", "-c", "..."] if you genuinely need a shell.',
+        error: describeShellCommandTypeRefusal(),
       })
       .nonempty()
       .optional(),
@@ -328,14 +336,15 @@ export const GatePassCriteriaSchema = z
         criteria.shell_command.length === 0 ||
         isBlank(criteria.shell_command[0]))
     ) {
+      const notice = retirementNotice('gate-shell-command-string');
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['shell_command'],
         message:
-          "shell_verify criteria require 'shell_command' as a non-empty argv array, e.g. " +
-          '["npm", "test"]. A bare string is no longer accepted: it was passed to `sh -c`, ' +
-          'so the shell parsed it and the operator allowlist could only defend that by ' +
-          'enumerating metacharacters.',
+          `shell_verify criteria require 'shell_command' as ${notice.replacement}; ` +
+          `${notice.retired} is no longer accepted (retired in ${notice.refusedIn}): it was ` +
+          'passed to `sh -c`, so the shell parsed it and the operator allowlist could only ' +
+          'defend that by enumerating metacharacters.',
       });
     }
     if (criteria.type === 'script_tool' && isBlank(criteria.script_tool_id)) {
@@ -750,10 +759,10 @@ export function validateGateSchema(data: unknown, expectedId?: string): GateSche
     const rawCriterion = criterion as Record<string, unknown>;
     for (const field of REJECTED_CRITERIA_FIELDS) {
       if (rawCriterion[field] !== undefined) {
+        const notice = retirementNotice('gate-criteria-pattern-fields');
         errors.push(
           `pass_criteria[${index}].${field} is not evaluated by any runner and is no longer ` +
-            'accepted; move the sentence into guidance.md (reminder) or use shell_verify/' +
-            'script_tool (check)'
+            `accepted (retired in ${notice.refusedIn}); use ${notice.replacement} instead`
         );
       }
     }

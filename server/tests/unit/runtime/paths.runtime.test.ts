@@ -379,7 +379,7 @@ describe('PathResolver.assertUsablePathSettings refuses an unusable path setting
 
     expect(refusalFor(new PathResolver({ cli: {}, packageRoot }))).toBe(
       [
-        'Refusing to start: MCP_RESOURCES_PATH is no longer read.',
+        'Refusing to start: MCP_RESOURCES_PATH is no longer read (retired in 6.0.0).',
         "Expected MCP_WORKSPACE set to a profile folder that holds resources/ (move the <type>/ folders under it), or the folder listed in paths.resources of the profile's config.jsonc.",
       ].join('\n')
     );

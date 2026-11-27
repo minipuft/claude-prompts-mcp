@@ -29,6 +29,8 @@ import type { TransportMode } from '#shared/types/index.js';
 import type { McpHttpHandler, McpServerFactory } from '@modelcontextprotocol/server';
 import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
+import { retirementNotice } from '#shared/utils/retirement-notice.js';
+
 /**
  * Reject a transport that was removed, rather than quietly substituting one.
  *
@@ -42,9 +44,10 @@ import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
  */
 function assertTransportSupported(value: string, source: string): void {
   if (value === 'sse') {
+    const notice = retirementNotice('transport-sse');
     throw new Error(
-      `${source}=sse is no longer supported: the HTTP+SSE transport was removed in the MCP SDK v2 ` +
-        `upgrade. Use streamable-http instead.`
+      `${source}=${notice.retired} is no longer supported: the HTTP+SSE transport was removed in ` +
+        `the MCP SDK v2 upgrade (retired in ${notice.refusedIn}). Use ${notice.replacement} instead.`
     );
   }
 }

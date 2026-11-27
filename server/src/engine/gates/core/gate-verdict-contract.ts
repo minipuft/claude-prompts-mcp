@@ -10,6 +10,8 @@ import type {
   GateVerdictSubmission,
 } from '#shared/types/gate-evaluation.js';
 
+import { retirementNotice } from '#shared/utils/retirement-notice.js';
+
 export type GateVerdictSource = 'gate_verdict';
 
 export interface ParsedGateVerdict {
@@ -113,7 +115,15 @@ export function describeGateVerdictRefusal(value: unknown): string {
   const lead = isObject
     ? 'gate_verdict does not match the structured object.'
     : `gate_verdict takes the structured object, not ${describeKind(value)}.`;
-  return `${lead} ${GATE_VERDICT_RESEND_SHAPE}`;
+  return `${lead}${describeRetiredStringForm(value)} ${GATE_VERDICT_RESEND_SHAPE}`;
+}
+
+/** The string form was once accepted, so a string sender also reads when it stopped being. */
+function describeRetiredStringForm(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const notice = retirementNotice('prompt-engine-gate-verdict-string');
+  const retired = notice.retired.charAt(0).toUpperCase() + notice.retired.slice(1);
+  return ` ${retired} was retired in ${notice.refusedIn}; send ${notice.replacement}.`;
 }
 
 /** Parse a structured submission, or `null` when it is absent or not a valid review. */
