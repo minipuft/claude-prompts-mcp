@@ -6,7 +6,6 @@ interface ToolParameter {
   status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental';
   required?: boolean;
   default?: unknown;
-  compatibility: 'canonical' | 'deprecated' | 'legacy'; // Required with default value
   examples?: string[];
   notes?: string[];
   enum?: string[]; // For enum types with explicit values
@@ -62,7 +61,6 @@ export const system_controlParameters: ToolParameter[] = [
       'The operation to perform: status (runtime overview), framework (switch/enable/disable frameworks), gates (manage quality gates), analytics (usage metrics), config (read-only: list/keys/validate — writes go through the `cpm` CLI), maintenance (restart), guide (get recommendations), injection (session overrides for injected guidance), session (manage execution sessions — list/clear/inspect), changes (resource change audit log), execution_history (chain execution ledger, newest first), skills_sync (export canonical resources to client skill packages — set operation to status|export|sync|diff|pull|clone).',
     required: true,
     status: 'working',
-    compatibility: 'canonical',
     examples: [
       'system_control({"action":"status"})',
       'system_control({"action":"framework","operation":"switch","framework":"CAGEERF","reason":"enable framework"})',
@@ -79,7 +77,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'Sub-command for the selected action (e.g., framework switch/list/enable/disable; gates enable/disable/status/health/list; analytics view/reset/history; config list/keys/get/validate; maintenance restart; injection status/override/reset; session list/clear/inspect; changes list; execution_history list/steps; skills_sync status/export/sync/diff/pull/clone).',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'session_id',
@@ -87,7 +84,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'Target session ID or chain ID for session operations and for execution_history steps (the latest record of each step of that run).',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'framework',
@@ -95,14 +91,12 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       "Target framework for switch operations. Use system_control(action:'framework', operation:'list') to see available frameworks.",
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'reason',
     type: 'string',
     description: 'Audit reason for framework/gate toggles or admin actions.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'persist',
@@ -110,7 +104,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'When true, gate/framework enable/disable changes are also written to the workspace config file (config.jsonc, or config.json if that is what exists).',
     status: 'working',
-    compatibility: 'canonical',
     notes: [
       'Applies to gate operations (enable/disable) and framework system enable/disable.',
       'Uses SafeConfigWriter; falls back to runtime-only if unavailable.',
@@ -121,28 +114,24 @@ export const system_controlParameters: ToolParameter[] = [
     type: 'boolean',
     description: 'Include detailed output (framework and session lists).',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'include_metrics',
     type: 'boolean',
     description: 'Include detailed metrics output (where supported).',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'topic',
     type: 'string',
     description: 'Guide topic when requesting guidance.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'include_planned',
     type: 'boolean',
     description: 'For guide: set false to leave out operations marked planned. Default: true.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'search_query',
@@ -150,7 +139,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'Filter gates by keyword (matches ID, name, or description). Use with gates:list action.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'confirm',
@@ -158,7 +146,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'Required `true` for operations that replace or discard state: analytics reset and maintenance restart. Each refuses without it.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'limit',
@@ -166,7 +153,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'Maximum entries to return, for analytics history, changes list and execution_history list.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'config',
@@ -174,14 +160,12 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For config `get`: `{ operation: "get", key }` returns that key\'s effective value and source. For config `validate` only: `{ key, value, operation: "validate" }` checks whether `value` would be valid for `key`, without writing it. Omit `config` and set the top-level `operation` to `list` (whole loaded configuration), `keys` (declared schema keys) or `validate` (load-time schema check).',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'type',
     type: 'enum[system-prompt|gate-guidance|style-guidance]',
     description: 'For injection override: the injection type to override.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'enabled',
@@ -189,7 +173,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For injection override: `true` turns the injection on, `false` turns it off. Required.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'scope',
@@ -197,7 +180,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       "Read by two actions with different values. skills_sync: `user` (default) or `project` client directories. injection override: `session` (default), `chain` or `step`. Each action refuses the other's values.",
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'scope_id',
@@ -205,7 +187,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For injection override: the chain or step id a `chain` or `step` scoped override applies to.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'expires_in_ms',
@@ -213,7 +194,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For injection override: milliseconds until the override expires. Omit it to keep the override until reset.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'source',
@@ -221,14 +201,12 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For changes list: only changes from this source — filesystem (a file edit hot reload detected), mcp-tool (a resource_manager write) or external (a change made while the server was down).',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'since',
     type: 'string',
     description: 'For changes list: only changes recorded since this ISO 8601 timestamp.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'resource_type',
@@ -236,7 +214,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'Resource type filter. skills_sync accepts prompt, gate, framework or style; changes list records prompt and gate only.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'client',
@@ -244,7 +221,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For skills_sync: target client id. Use one of: claude-code, cursor, codex, opencode, or all.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'id',
@@ -252,7 +228,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For skills_sync: resource id filter, or for clone the id of the resource to create.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'prune',
@@ -260,7 +235,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For skills_sync sync: when true (default), remove stale managed skills not present in current registrations.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'preview',
@@ -268,7 +242,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For skills_sync export/sync/pull/clone: report every file, prune and registration change the run would make, and make none of them.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'preview_detail',
@@ -276,7 +249,6 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For skills_sync: how much `preview` shows. `summary` (default) lists the planned changes; `diff` adds unified diffs and is valid for `pull` only, the one command that computes prose changes. Requires `preview: true` — on its own it would not be read, so it is refused by name.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'output',
@@ -284,28 +256,24 @@ export const system_controlParameters: ToolParameter[] = [
     description:
       'For skills_sync diff: write .patch files to this directory instead of stdout only.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'file',
     type: 'string',
     description: 'For skills_sync clone: path to the source SKILL.md file. Required for clone.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'category',
     type: 'string',
     description: 'For skills_sync clone: target category for prompt resources. Default: general.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'force',
     type: 'boolean',
     description: 'For skills_sync clone: overwrite an existing resource directory.',
     status: 'working',
-    compatibility: 'canonical',
   },
 ];
 

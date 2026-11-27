@@ -121,7 +121,7 @@ Edit `tooling/contracts/*.json`:
 
 - Use the SAME parameter name as the service
 - Use the SAME type as the service
-- Include proper `status`, `compatibility`, and migration notes
+- Include a proper `status` and migration notes; a retired spelling is recorded in the retirement ledger (`tooling/contracts/registries/retirements.json`), not labelled on the parameter
 
 ### Step 3: Update Types (if needed)
 

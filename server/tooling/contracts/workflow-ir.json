@@ -9,7 +9,6 @@
       "description": "[Workflow IR] IR schema version. Literal 1. A future shape change bumps this so the discriminant is typed rather than inferred.",
       "required": true,
       "status": "working",
-      "compatibility": "canonical",
       "examples": ["1"]
     },
     {
@@ -18,7 +17,6 @@
       "description": "[Workflow IR] The steps of the run, in declaration order. Each node: {id (kebab-case, unique), promptId, stepName?, args?, inputMapping?, outputMapping?, visibility?{withhold[],expose[]}, subagentModel?(heavy|standard|fast), agentType?, framework?, retries?, inlineGateIds?, inlineGateCriteria?, delegated?, await?(node|run)}. Declaration order is the tiebreak the linearizer drains its ready set by, so a workflow with no edges runs exactly in the order written.",
       "required": true,
       "status": "working",
-      "compatibility": "canonical",
       "notes": [
         "Node ids are the same id space as ChainNode.id and target_step_id.",
         "Kebab-case. `target_step_id`'s second `n\\d+` alternative is not repeated here and is redundant against kebab-case anyway (`n1` already matches).",
@@ -34,7 +32,6 @@
       "description": "[Workflow IR] Dependency assertions, {from, to}: `to` may not run before `from`. NOT control flow — there is no branching runtime, so edges are compiled to a total order and nothing downstream ever sees an edge. A cycle is rejected; endpoints must name declared nodes.",
       "required": false,
       "status": "working",
-      "compatibility": "canonical",
       "examples": ["[{\"from\":\"gather\",\"to\":\"synthesize\"}]"]
     },
     {
@@ -42,8 +39,7 @@
       "type": "array",
       "description": "[Workflow IR] Run-level gate bindings, reusing the prompt_engine `gates` union verbatim (gate id strings, {name,description} custom checks, or full gate objects). An object entry's `target_step_id` addresses a node id declared in `nodes`; a target naming no declared node is rejected as `gate-target-missing`.",
       "required": false,
-      "status": "working",
-      "compatibility": "canonical"
+      "status": "working"
     },
     {
       "name": "budget",
@@ -51,7 +47,6 @@
       "description": "[Workflow IR] Declared budget, split by enforcement posture. ENFORCED (structural, counted server-side): maxNodes, maxFanOut, maxInsertions — each may only NARROW the server cap, never widen it; a wider value is rejected, not silently clamped. RECORDED ONLY: declaredCostCeiling, written to the existing execution_records telemetry object and never enforced, because the server never observes client token usage. BEHAVIOURAL: pauseOnBlocking (boolean, default false) — when true, a blocking unknown HARD-PAUSES the run instead of continuing into the inserted investigation step.",
       "required": false,
       "status": "working",
-      "compatibility": "canonical",
       "notes": [
         "Server defaults live in DEFAULT_WORKFLOW_CAPS (modules/workflow-ir/types.ts).",
         "maxInsertions narrows the P4 adaptive-insertion ceiling MAX_INSERTIONS_PER_RUN.",

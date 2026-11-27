@@ -405,7 +405,6 @@ function runSelfTest(): void {
         type: 'string',
         description: 'Fixture parameter.',
         status: 'working',
-        compatibility: 'canonical',
       },
     ],
   };
@@ -540,7 +539,6 @@ async function main(): Promise<void> {
       `  status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental';`,
       '  required?: boolean;',
       '  default?: unknown;',
-      `  compatibility: 'canonical' | 'deprecated' | 'legacy'; // Required with default value`,
       '  examples?: string[];',
       '  notes?: string[];',
       '  enum?: string[]; // For enum types with explicit values',

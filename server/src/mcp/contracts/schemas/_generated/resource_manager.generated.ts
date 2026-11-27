@@ -6,7 +6,6 @@ interface ToolParameter {
   status: 'working' | 'needs-validation' | 'deprecated' | 'hidden' | 'experimental';
   required?: boolean;
   default?: unknown;
-  compatibility: 'canonical' | 'deprecated' | 'legacy'; // Required with default value
   examples?: string[];
   notes?: string[];
   enum?: string[]; // For enum types with explicit values
@@ -107,7 +106,6 @@ export const resource_managerParameters: ToolParameter[] = [
       "Type of resource to manage. Routes to appropriate handler. `category` manages a prompt category's `category.yaml` — the directory holding the prompts is NOT the resource, so `delete` removes the declaration and leaves every prompt in place.",
     required: true,
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'action',
@@ -116,7 +114,6 @@ export const resource_managerParameters: ToolParameter[] = [
       'Operation to perform. Prompt-only: analyze_type/analyze_gates/guide. validate checks a prompt creation draft without writing; on a gate it runs the examples declared beside the gate through its own check and returns one line per example, listing them as not executed for a gate judged by the client model. preview renders what update/delete/rollback would do without writing, naming its target in `preview_action`; it is not destructive, so it takes no `confirm`. Framework-only: switch. Versioning: history/rollback/compare. A create or update reply ends with a `saved: <absolute path>` line naming the file it wrote.',
     required: true,
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'id',
@@ -124,28 +121,24 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       'Resource identifier. Required for create, update, delete, inspect, reload, switch.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'name',
     type: 'string',
     description: 'Human-friendly name for the resource (create/update).',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'description',
     type: 'string',
     description: 'Resource description explaining its purpose (create/update).',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'enabled_only',
     type: 'boolean',
     description: '[Gate | Framework] Filter list to enabled resources only. Default: true.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'confirm',
@@ -153,14 +146,12 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       'Required `true` for destructive actions — `delete` and `rollback` both refuse without it. Deletion cannot be undone: rollback cannot restore a deleted prompt.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'reason',
     type: 'string',
     description: 'Audit reason for reload/delete/switch operations.',
     status: 'working',
-    compatibility: 'canonical',
   },
   {
     name: 'full_restart',
@@ -168,7 +159,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] For reload, create, update and delete: restart the server instead of hot-reloading prompts. Default: false.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -177,7 +167,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt guide] What you are trying to do; the guide ranks its suggested actions against it.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -186,7 +175,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt guide] Show full details for actions that are not marked working. Default: false.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -194,7 +182,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'string',
     description: '[Prompt] Category tag for the prompt.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -202,7 +189,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'string',
     description: '[Prompt] Prompt body/template with Nunjucks placeholders.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -210,7 +196,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'string',
     description: '[Prompt] Optional system message for the prompt.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -219,7 +204,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Prompt] Argument definitions for the prompt. `type` is one of string|number|boolean|array|object. `required` and `defaultValue` are persisted to the prompt's YAML; `validation` accepts pattern/minLength/maxLength and is what arms required-argument enforcement at execution.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -228,7 +212,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Update-only: per-field overlay onto EXISTING arguments, addressed by `name`. `name` must match an argument this prompt already declares — no upsert, so adding/removing/renaming an argument still requires the full `arguments` array. Every other field overlays onto the matched entry only when supplied; an omitted field leaves that entry\'s current value untouched. Mutually exclusive with `arguments` in the same call. Rejected on `create`. Send the same payload as `action:"preview"` with `preview_action:"update"` to see the result first.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -237,7 +220,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Anchored edits applied server-side on `update`, so one section can be changed without resending the rest. `field` is user_message_template|system_message|description; `old_string` must match the current text EXACTLY (whitespace included) and uniquely, otherwise the update is rejected naming the anchor and its occurrence count; `new_string` may be empty to delete. Operations apply in order. Pass `replace_all: true` to accept a multi-occurrence anchor. Mutually exclusive with `user_message_template`/`system_message` in the same call. Send the same payload as `action:"preview"` with `preview_action:"update"` to confirm an anchor matched before spending a version.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -246,7 +228,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Versioning] Read version history belonging to a DIFFERENT workspace. `state.db` is one file shared by every project on the machine, isolated by workspace id alone, so another checkout's history is already present and merely filtered out. READ-ONLY and scope-local-on-write: honoured by `history` and `compare`; every other action REJECTS it rather than ignoring it, because a snapshot recorded elsewhere describes files that may not exist here and version numbering is per-workspace. Inspect with it, then apply the change in that workspace.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -255,7 +236,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       'Required with `action:"preview"`, and refused without it — it names WHICH mutation is being previewed. `update` (prompt only): returns the resulting text bodies and the diff, for a full update or a `patch`. `rollback` (prompt|gate|framework): returns the diff between the current state and the version you would restore, and still refuses a version whose snapshot is incomplete. `delete` (prompt|gate|framework): reports what would be removed, including the prompts that reference it. A preview writes nothing, records no version, and needs no `confirm` — it is not a destructive action. `update` is refused for gate and framework, which have no update preview path and would perform the update.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -264,7 +244,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Update-only: how a `tools` change relates to the CURRENT binding. Omit it and a supplied `tools` array REPLACES the binding, so a narrowed array unbinds the dropped ids and leaves their `tools/{id}/` files on disk — the non-destructive default. `add` unions the supplied definitions with what is already bound. `remove` names ids in `tool_ids`, unbinds them AND deletes their directories, and therefore requires `confirm: true`: it is the only `update` that destroys a file the caller sent no replacement for.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -273,7 +252,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Tool ids to unbind and delete. Required by `tool_operation: "remove"` and refused without it, because a parameter that silently does nothing reads as a removal that happened.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -282,7 +260,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Update-only: CLEAR these fields, naming them as the tool parameters you would use to set them. Supplying a value SETS it and omitting it PRESERVES it, so before this there was no way to say REMOVE — `system_message: ""` set an empty body rather than dropping the key, and for the fields the writer carries forward off disk (`tools`, `injection`, `register_with_mcp`, `mcp_prompt_mode`, `subagent_model`, `agent_type`, `composer`) omission was already the preserve signal. Unsettable: agent_type, arguments, artifacts, budget, chain_steps, composer, edges, gate_configuration, injection, mcp_prompt_mode, register_with_mcp, subagent_model, system_message, tools. `name`, `category`, `description` and `user_message_template` are refused by name: they stay settable, but a prompt missing one does not load. Unsetting `system_message` also deletes `system-message.md`; unsetting `tools` unbinds without deleting `tools/{id}/`. A field both supplied and unset in one call is refused rather than resolved in an unseen order.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -291,7 +268,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Chain steps definition for multi-step prompts. Each entry: promptId and stepName required; optional id (kebab-case, minted from stepName when omitted), args, inputMapping, outputMapping, visibility, subagentModel, agentType, framework, retries, inlineGateIds, inlineGateCriteria, delegated, await (node|run — run makes the step detached). Extra keys pass through uninterpreted.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -300,7 +276,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Update-only: edit ONE step instead of replacing the whole array. Omit it and a supplied `chain_steps` replaces every step. `add` inserts `chain_step_data` at `chain_step_index`; `remove` drops the step at `chain_step_index`; `reorder` applies `chain_step_order`; `update` overlays `chain_step_data` onto the step at `chain_step_index`, the per-step analogue of `argument_updates`.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -309,7 +284,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Target index for `chain_step_operation` add (insertion point), remove, or update (step to edit). Zero-based, and refused outside the current step range.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -318,7 +292,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Step definition for `chain_step_operation: "add"` (the whole step) or `"update"` (the fields to overlay). Same shape as one entry of `chain_steps`.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -327,7 +300,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] New index order for `chain_step_operation: "reorder"`. Must be a permutation of [0..n-1] for the current step count; anything else is refused rather than partially applied.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -336,7 +308,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Dependency edges between this chain\'s steps, each `{from, to}` naming a step id — an explicit step `id`, or the kebab-case slug minted from `stepName`. Ordering constraints, not control flow: the loader linearizes them into `chainSteps` order at load time. An edge naming a step the chain does not declare, or a cycle, is refused and the write is rolled back — so a `chain_steps` rewrite that drops a step an edge still names must send the corrected `edges` in the SAME call, which is validated as one state. Send `unset: ["edges"]` to drop every edge and keep the authored step order.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -345,7 +316,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Run-level budget for a chain, the same shape and the same caps a submitted Workflow IR declares. A declared structural cap may only NARROW the server default, so a value above it is refused here rather than silently clamped, and an unrecognized key is refused rather than dropped. `pauseOnBlocking: true` HOLDS the run on a blocking unknown until a `gate_action` verb clears it. Send `unset: ["budget"]` to drop the declaration and run on the server defaults.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -354,7 +324,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] What this prompt\'s run touches, in the fixed artifact-kind vocabulary (source, test, docs, readme, plan, changelog, config, prompt, gate, pr-body). `produces` names kinds it always yields; `fromArgument` names one declared argument whose value carries the paths this run touches, and must match an argument the prompt declares — the two union. This is the only channel a run has for declaring artifacts, and artifact-scoped gates attach from it. Send `unset: ["artifacts"]` to declare nothing.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -363,7 +332,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Script tools to create with the prompt. Each tool creates files in tools/{id}/ subdirectory. Required: id, name, script. Optional: description, runtime (python|node|shell|auto), schema (JSON Schema object), trigger (schema_match|explicit|always|never), confirm, strict, timeout. An entry of any other shape is refused before anything is written. On update, the list replaces the prompt\'s tools: a tool left out is unbound and its folder kept; use tool_operation "add" or "remove" to change one.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -372,7 +340,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Prompt] Gate configuration: include (array), exclude (array), framework_gates (boolean — whether this prompt runs its framework's gates; unrelated to the top-level framework_gates parameter, which defines them).",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -381,7 +348,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Interactive composer metadata. inputArgument must name a declared string argument; clients may map their current draft only when this field is present.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -390,7 +356,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Prompt] Prompt-level injection control. Keys: system-prompt, gate-guidance, style-guidance; each takes {enabled?: boolean, frequency?: {mode: every|first-only|never, interval?: number}, target?: steps|gates|both}. A prompt's own declaration outranks the chain or category it runs inside. Omit to leave the prompt's existing block untouched.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -399,7 +364,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt | Category] Whether prompts register as native MCP prompts. On resource_type prompt — FREEZE HAZARD: this value is normally resolved prompt -> category -> global -> default true; setting it writes an explicit prompt-level value that overrides all three permanently, so the prompt stops following any later change to its category or global default. Omit unless this prompt must differ from its category. On resource_type category it writes registerWithMcp into category.yaml, which is that middle level — no freeze hazard, since every prompt in the category still inherits it unless it declares its own.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -408,7 +372,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt | Category] Native MCP prompt behaviour: expand (plain template text) or launch (route through prompt_engine). On resource_type prompt — FREEZE HAZARD: normally resolved prompt -> category -> default expand; an explicit value overrides both permanently and the prompt stops following any later change to its category default. Omit unless this prompt must differ from its category. On resource_type category it writes mcpPromptMode into category.yaml, the default every prompt in the category inherits.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -416,7 +379,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'enum[heavy|standard|fast]',
     description: "[Prompt] Client-agnostic capability hint for this prompt's ==> delegated steps.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -425,7 +387,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Prompt] Default host agent for this prompt's ==> delegated steps. A step's own agentType overrides it; neither present leaves the choice to the client (Claude Code: general-purpose).",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -433,7 +394,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'string',
     description: '[Prompt] List filter query.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -442,7 +402,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt] Detail level for list/inspect. summary=IDs only, full=complete prompt content.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -450,7 +409,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'string',
     description: '[Prompt] Search query for filtering (list action).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -459,7 +417,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Gate] Gate type: validation (pass/fail) or guidance (advisory). Default: validation. Writes the gate.yaml key 'type'.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -468,7 +425,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Gate] Gate classification. Default: custom. Writes the gate.yaml key 'gate_type'; 'framework' marks a gate that requires an active framework and is filtered out when framework gates are disabled.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -477,7 +433,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Gate] Free kebab-case tag naming what this gate reminds about (e.g. 'code-quality'). An installation's `gates.harnessCovers` (config.jsonc, or config.json) suppresses reminder-tier gates whose subject it lists; check-tier gates (shell_verify, script_tool) are never suppressed. Lowercase letters, digits and hyphens only.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -486,7 +441,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Gate] Severity for prioritization. Default: medium. Omitted on update, an existing gate keeps its current value.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -495,7 +449,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Gate] What a FAIL does: blocking holds the chain step, advisory advances and names the failure in the reply, informational advances silently. Absent, the gate holds a chain step. When a FAIL verdict names gates in per_gate, only those gates decide; otherwise the strictest gate on the step does.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -504,7 +457,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Gate] Withhold the step output when this gate is marked FAIL, returning the gate review in its place. Writes the gate.yaml key 'blockResponseOnFail'. Omitted on update, an existing gate keeps its current value; send `false` to clear it.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -513,7 +465,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Gate] Requested reviewer config {mode:'self'|'judge',model?,strict?}; model is a routing hint, not observed host/native identity. Judge requests isolated review and strict defaults true. Separate from evaluation.reviewer client claims in a gate report; neither establishes accuracy. Writes gate.yaml evaluation whole; omitted on update retains it, supplied block replaces it. Send {mode:'self'} to return to self-review. Unknown inner keys refuse by path.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -522,7 +473,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Gate create/update] Nonempty opaque evaluation-suite association, preserved verbatim in gate.yaml. Omitted on update, the existing association is retained; a supplied value replaces it. This identifier does not resolve an archive, file path, calibration case or expected label.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -530,7 +480,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'string',
     description: '[Gate] Gate guidance content - the criteria or instructions.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -539,7 +488,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Gate] Criterion objects. Legacy types: inline_guidance; framework_compliance with framework/min_compliance_score/severity/quality_indicators; shell_verify with shell_command (nonempty string array)/shell_timeout/shell_working_dir/shell_env/shell_max_attempts/shell_preset/shell_stdin_source/shell_response_env_var; script_tool with script_tool_id/script_tool_input/script_tool_timeout/script_tool_working_dir. semantic_evaluation requires id,target,question,evidence_requirements:{min_items},result (boolean/category/anchored score),compatible acceptance; allow_not_applicable defaults false. Target step_output uses server capture; artifact with opaque id is authorable but runtime capture unavailable. Unknown keys and retired pattern/length criteria are refused.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -548,7 +496,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Gate] Activation rules: prompt_categories, framework_context (framework ids), explicit_request (boolean), artifacts (artifact kinds).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -557,7 +504,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Gate] Retry configuration: max_attempts (positive integer), improvement_hints and preserve_context (booleans).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -566,7 +512,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       "[Framework] Framework type identifier. Use action:'list' to see registered frameworks.",
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -574,7 +519,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'string',
     description: '[Framework] System prompt guidance injected when active.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -583,7 +527,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Phase definitions: id and name (required), description, prompts. The advanced fields are declared as their own parameters below.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -591,7 +534,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'object',
     description: '[Framework] Gate configuration: include, exclude arrays.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -600,7 +542,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Tool description overlays when active, keyed by tool name: a string, or description plus parameters (name to text).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -608,7 +549,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'boolean',
     description: '[Framework] Whether the framework is enabled.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -617,7 +557,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Quality gates for this framework, written to framework.yaml. REQUIRED to create a framework. Each entry: id and name (both required), description, frameworkArea, priority (critical|high|medium|low), validationCriteria (array<string>), criteria, severity.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -626,7 +565,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Prompt-enhancement suggestions, written to framework.yaml. Each entry: section (system|user) and type (addition|structure|modification) required; description, content, frameworkJustification, impact (high|medium|low).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -635,7 +573,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Section structure expected of a prompt, written to framework.yaml as frameworkElements: requiredSections (array<string>), optionalSections, sectionDescriptions (object).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -644,7 +581,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Arguments this framework suggests a prompt declare, written to framework.yaml as argumentSuggestions. Each entry: name, type (string|array|object|boolean|number), description, frameworkReason, examples.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -652,7 +588,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'string',
     description: '[Framework] Judge-prompt body, written to the file judgePromptFile names.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -661,7 +596,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Ordered template-processing steps, written to phases.yaml. Each entry: id, name, description, frameworkBasis, order (positive int), required (boolean); optional section_header and guards.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -670,7 +604,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Execution steps with dependencies, written to phases.yaml. Each entry: id, name, action, frameworkPhase, expected_output; optional dependencies (array<string>).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -679,7 +612,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Per-execution-type step overlays, written to phases.yaml: chain.advancedChain and chain.simpleChain, each mapping a step name to its lines.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -688,7 +620,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Written to phases.yaml: systemPromptAdditions, userPromptModifications, contextualHints (each array<string>).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -697,7 +628,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Hooks around execution, written to phases.yaml: preProcessingSteps, postProcessingSteps, validationSteps (each array<string>).',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -706,7 +636,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Framework] Per-phase keywords and patterns for compliance scoring, written to phases.yaml.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -714,7 +643,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'number',
     description: '[Versioning] Target version number for rollback action.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -722,7 +650,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'number',
     description: '[Versioning] Starting version number for compare action.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -730,7 +657,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'number',
     description: '[Versioning] Ending version number for compare action.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -738,7 +664,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'number',
     description: '[Versioning] Max versions to return in history. Default: 10.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -746,7 +671,6 @@ export const resource_managerParameters: ToolParameter[] = [
     type: 'boolean',
     description: '[Versioning] Skip auto-versioning on update. Default: false.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: false,
   },
   {
@@ -755,7 +679,6 @@ export const resource_managerParameters: ToolParameter[] = [
     description:
       '[Prompt update] Optimistic concurrency token. Refuses the update before any write/version when the current recorded version differs. Read it from inspect/validate/create/update structured receipts. Cannot be combined with skip_version:true and requires versioning enabled.',
     status: 'working',
-    compatibility: 'canonical',
     includeInDescription: true,
   },
 ];
