@@ -153,8 +153,6 @@ export class ArgumentSchemaValidator {
 
   /**
    * Apply common constraints to any schema type.
-   * Note: allowedValues *enforcement* was removed in v3.0.0 - LLM handles semantic variation
-   * better than strict enum enforcement. The field is still accepted upstream, just not applied.
    */
   private applyCommonConstraints<T extends ZodTypeAny>(
     _arg: PromptArgument,
@@ -191,9 +189,6 @@ export class ArgumentSchemaValidator {
         message: `Value must contain no more than ${validation.maxLength} characters`,
       });
     }
-
-    // Note: allowedValues support was removed in v3.0.0
-    // LLM handles semantic variation (e.g., "urgent" vs "high") better than strict enums
 
     return refined;
   }

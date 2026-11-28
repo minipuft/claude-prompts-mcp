@@ -428,9 +428,6 @@ function normalizeArguments(args: PromptYaml['arguments']): PromptArgument[] {
       if (arg.validation.pattern !== undefined) validation.pattern = arg.validation.pattern;
       if (arg.validation.minLength !== undefined) validation.minLength = arg.validation.minLength;
       if (arg.validation.maxLength !== undefined) validation.maxLength = arg.validation.maxLength;
-      if (arg.validation.allowedValues !== undefined) {
-        validation.allowedValues = arg.validation.allowedValues;
-      }
       if (Object.keys(validation).length > 0) normalized.validation = validation;
     }
     return normalized;

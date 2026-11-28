@@ -385,29 +385,6 @@ describe('ArgumentSchemaValidator', () => {
     });
   });
 
-  describe('allowedValues deprecation', () => {
-    test('ignores allowedValues constraint (deprecated in v3.0.0)', () => {
-      const prompt: ConvertedPrompt = {
-        ...basePrompt,
-        arguments: [
-          {
-            name: 'priority',
-            required: true,
-            type: 'string',
-            validation: { allowedValues: ['low', 'medium', 'high'] },
-          },
-        ],
-      };
-
-      const validator = new ArgumentSchemaValidator();
-      // Should pass even with value not in allowedValues - LLM handles variation
-      const result = validator.validate(prompt, { priority: 'urgent' });
-
-      expect(result.success).toBe(true);
-      expect(result.issues).toHaveLength(0);
-    });
-  });
-
   describe('schema caching', () => {
     test('caches schema for repeated validations', () => {
       const prompt: ConvertedPrompt = {

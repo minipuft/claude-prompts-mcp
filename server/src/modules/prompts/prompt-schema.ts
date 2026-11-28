@@ -23,7 +23,7 @@ import {
   workflowNodeIdSchema,
   workflowNodeSchema,
 } from '#modules/workflow-ir/node-schema.js';
-import { refuseUndeclaredKey, refuseUnionMismatch } from '#shared/utils/nested-key-refusal.js';
+import { refuseUndeclaredKey } from '#shared/utils/nested-key-refusal.js';
 import { mintNodeIds } from '#shared/utils/node-order.js';
 
 // ============================================
@@ -42,15 +42,6 @@ export const ArgumentValidationSchema = z
       minLength: z.number().int().nonnegative().optional(),
       /** Maximum length for strings */
       maxLength: z.number().int().positive().optional(),
-      /**
-       * @deprecated Enforcement was dropped in v3.0.0 — the LLM handles semantic variation
-       * (e.g. "urgent" vs "high") better than a strict enum. The field itself was not removed:
-       * it is still accepted here and carried through yaml-prompt-loader.ts, but
-       * argument-schema.ts deliberately never applies it.
-       */
-      allowedValues: z
-        .array(z.union([z.string(), z.number(), z.boolean()], { error: refuseUnionMismatch }))
-        .optional(),
     },
     { error: refuseUndeclaredKey }
   )
