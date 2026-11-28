@@ -301,7 +301,6 @@ export interface ResourceDependencies {
       sessions?: boolean;
       metrics?: boolean;
     };
-    logs?: { enabled?: boolean };
   };
 }
 

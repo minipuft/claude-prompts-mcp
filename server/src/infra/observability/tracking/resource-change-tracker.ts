@@ -65,17 +65,6 @@ export type {
  * Configuration for the tracker
  */
 export interface ResourceChangeTrackerConfig {
-  /**
-   * @deprecated Reads nothing. The cap for `resource_changes` is declared in
-   * `table-contracts.ts` and enforced by `enforceRetention()`, which is now the single owner.
-   *
-   * Left in place rather than deleted because removing it also touches the user-facing
-   * `resources.logs.maxEntries` config key, its validator, and its docs — a config-surface
-   * change, not a retention one. Worth knowing: that key was ALREADY inert before this tier,
-   * because `initializeResourceChangeTracker` hardcodes 1000 and never reads config. It is
-   * settable, range-validated (50-5000), and consumed by nothing.
-   */
-  maxEntries: number;
   /** Writable SQLite path decided by the runtime composition root (`PathResolver`). */
   dbPath: string;
   /** Whether to track prompts */
@@ -100,7 +89,6 @@ type ResourceChangeTrackerOptions = Partial<ResourceChangeTrackerConfig> &
   Pick<ResourceChangeTrackerConfig, 'dbPath'>;
 
 const DEFAULT_CONFIG: Omit<ResourceChangeTrackerConfig, 'dbPath'> = {
-  maxEntries: 1000,
   trackPrompts: true,
   trackGates: true,
 };
@@ -284,9 +272,8 @@ export class ResourceChangeTracker implements ResourceChangeLogPort {
   /**
    * Trim the change log to the cap declared for `resource_changes` in table-contracts.ts.
    *
-   * Delegates rather than inlining its own DELETE, which is what this used to do with a
-   * `maxEntries` config value that could disagree with the declared contract. One definition now
-   * serves two call sites: the engine's startup pass and this per-write trim.
+   * Delegates to `enforceRetention()`, so the declared cap is the only limit on this table. One
+   * definition serves two call sites: the engine's startup pass and this per-write trim.
    *
    * The per-write call is kept deliberately. A startup-only pass would let the table grow without
    * bound for the length of a session, and this table is the one measured at its cap and actively

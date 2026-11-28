@@ -55,8 +55,8 @@ export type {
  * - prompts.enabled: Enable prompt resources
  * - gates.enabled: Enable gate resources
  * - frameworks.enabled: Enable framework resources
- * - observability.enabled: Enable observability resources (sessions + metrics)
- * - logs.enabled: Enable logs resources
+ * - observability.enabled: Enable observability resources (sessions, metrics, and logs when a
+ *   log manager is supplied)
  *
  * @param server - The MCP server instance
  * @param dependencies - Singleton manager references for data access

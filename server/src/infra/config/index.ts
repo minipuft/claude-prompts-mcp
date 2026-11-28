@@ -157,11 +157,6 @@ const DEFAULT_RESOURCES_CONFIG: ResourcesConfig = {
     sessions: true,
     metrics: true,
   },
-  logs: {
-    enabled: true,
-    maxEntries: 500,
-    defaultLevel: 'info',
-  },
 };
 
 /**
@@ -400,11 +395,6 @@ function normalizeResources(file: ConfigFile): Config['resources'] {
       enabled: resources?.observability?.enabled ?? def.observability?.enabled,
       sessions: resources?.observability?.sessions ?? def.observability?.sessions,
       metrics: resources?.observability?.metrics ?? def.observability?.metrics,
-    },
-    logs: {
-      enabled: resources?.logs?.enabled ?? def.logs?.enabled,
-      maxEntries: resources?.logs?.maxEntries ?? def.logs?.maxEntries,
-      defaultLevel: resources?.logs?.defaultLevel ?? def.logs?.defaultLevel,
     },
   };
 }

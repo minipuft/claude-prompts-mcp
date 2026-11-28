@@ -75,7 +75,8 @@ function rejectReservedOperators(tokens: TokenizedCommand): void {
     const symbol = RESERVED_OPERATORS.get(token.type);
     if (symbol !== undefined) {
       throw new ValidationError(
-        `Operator "${symbol}" is reserved and not implemented. It is documented for a future release and cannot be executed yet.`
+        `Operator "${symbol}" is reserved and not implemented, so this command is refused and ` +
+          `nothing ran. Remove "${symbol}" and send each prompt as its own command.`
       );
     }
   }

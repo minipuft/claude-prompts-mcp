@@ -12,7 +12,7 @@
  *     the TypeScript syntax tree, and string constants in `hooks/**\/*.py`, read by Python's
  *     `ast` module. Comments, docstrings, identifiers, import specifiers, property names and
  *     literal types are not strings a user is shown, so they are not read. Test files are not
- *     read. Third-state phrases only.
+ *     read. Every phrase: a refusal or notice the product shows describes what it does today.
  *   - architecture docs (`docs/architecture/**`), contributor text outside the user-facing set.
  *     Promise phrases only: those pages name old rows and old schemas on purpose, but they
  *     describe the system as built and a promise there decays the same way.
@@ -33,7 +33,7 @@ import { trackedFilesUnder } from './tracked-scope.js';
 import type { UserFacingLine } from './user-facing-scope.js';
 
 /** What a phrase describes, which decides the scopes it reads and the message it fails with. */
-export type WordingKind = 'third-state' | 'promise';
+type WordingKind = 'third-state' | 'promise';
 
 /** One phrase, with the line that says what it catches. */
 export interface WordingPhrase {
@@ -103,7 +103,7 @@ export function loadWordingRules(repoRoot: string): WordingRules {
 }
 
 /** Every phrase match, one per file, line and phrase. */
-export function findWordingHits(
+function findWordingHits(
   sources: readonly WordingSource[],
   phrases: readonly WordingPhrase[]
 ): WordingHit[] {
@@ -134,9 +134,10 @@ export function findScopedWordingHits(
 ): WordingHit[] {
   const promises = phrases.filter((phrase) => phrase.kind === 'promise');
   const thirdState = phrases.filter((phrase) => phrase.kind !== 'promise');
+  const shown = [...scopes.texts, ...scopes.codeStrings];
   return [
-    ...findWordingHits([...scopes.texts, ...scopes.codeStrings], thirdState),
-    ...findWordingHits([...scopes.texts, ...scopes.architecture], promises),
+    ...findWordingHits(shown, thirdState),
+    ...findWordingHits([...shown, ...scopes.architecture], promises),
   ];
 }
 

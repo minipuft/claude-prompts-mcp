@@ -85,7 +85,6 @@ describe('ResourceChangeTracker baseline comparison', () => {
 
   it('counts every tracked resource as added on first run, and nothing on an unchanged rerun', async () => {
     const tracker = createResourceChangeTracker(logger as any, {
-      maxEntries: 1000,
       dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
@@ -112,7 +111,6 @@ describe('ResourceChangeTracker baseline comparison', () => {
 
   it('detects a modification when a tracked file changes between runs', async () => {
     const tracker = createResourceChangeTracker(logger as any, {
-      maxEntries: 1000,
       dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
@@ -130,7 +128,6 @@ describe('ResourceChangeTracker baseline comparison', () => {
 
   it('preserves a full resource ID containing a slash when detecting removals', async () => {
     const tracker = createResourceChangeTracker(logger as any, {
-      maxEntries: 1000,
       dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();
@@ -179,7 +176,6 @@ describe('ResourceChangeTracker baseline comparison', () => {
 
     it('stamps the configured defaultScope onto rows it writes', async () => {
       const tracker = createResourceChangeTracker(logger as any, {
-        maxEntries: 1000,
         dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
         defaultScope: { workspaceId: 'ws-alpha', organizationId: 'org-alpha' },
       });
@@ -200,7 +196,6 @@ describe('ResourceChangeTracker baseline comparison', () => {
 
     it('falls back to the default tenant and NULL scope when no defaultScope is configured', async () => {
       const tracker = createResourceChangeTracker(logger as any, {
-        maxEntries: 1000,
         dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
       });
       await tracker.initialize();
@@ -221,7 +216,6 @@ describe('ResourceChangeTracker baseline comparison', () => {
 
     it('stamps scope on removals, which take a different branch to the same insert', async () => {
       const tracker = createResourceChangeTracker(logger as any, {
-        maxEntries: 1000,
         dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
         defaultScope: { workspaceId: 'ws-beta' },
       });

@@ -47,7 +47,6 @@ const HAND_FIXED_5_TWIN = {
   prompts: { directory: 'resources/prompts', registerWithMcp: true },
   resources: {
     gates: { enabled: true },
-    logs: { defaultLevel: 'info', enabled: true, maxEntries: 500 },
     frameworks: { enabled: true },
     observability: { enabled: true, metrics: true, sessions: true },
     prompts: { enabled: true },
@@ -88,6 +87,7 @@ function expectedShippedRefusal(configPath: string): string {
       '"chainSessions.cleanupIntervalMinutes"',
     '  - "server.transport": remove it; stdio is the default, and another transport is chosen ' +
       'at launch with the launch flag --transport=streamable-http (or --transport=both)',
+    '  - "resources.logs": remove it; nothing reads it and nothing replaces it',
     '  - "gates.directory": remove it; gates are read from the gates/ folder of each location ' +
       'in "paths.resources"',
     '  - "advanced": remove the section; 5.0 has no "advanced" section, and chain session ' +
@@ -164,7 +164,7 @@ describe('a config file with no "version" is refused at load', () => {
   it('names the boolean an "on"/"off" key becomes, and asks for one when the value is neither', async () => {
     const refusal = await refusalFor({
       gates: { mode: 'off' },
-      resources: { mode: 'on', logs: { mode: 'yes' } },
+      resources: { mode: 'on', gates: { mode: 'yes' } },
     });
 
     expect(refusal).toContain('  - "gates.mode": "off" becomes "gates.enabled": false');
@@ -172,7 +172,7 @@ describe('a config file with no "version" is refused at load', () => {
       '  - "resources.mode": "on" becomes "resources.registerWithMcp": true'
     );
     expect(refusal).toContain(
-      '  - "resources.logs.mode": replace it with "resources.logs.enabled" set to true or false'
+      '  - "resources.gates.mode": replace it with "resources.gates.enabled" set to true or false'
     );
   });
 

@@ -458,7 +458,8 @@ describe('reserved operators (operators.json status: reserved)', () => {
   // the reserved operator was tokenized and then silently dropped by every strategy.
   test('rejects the parallel operator (+)', async () => {
     await expect(parser.parseCommand('>>analyze + >>summarize', prompts)).rejects.toThrow(
-      /Operator "\+" is reserved and not implemented/
+      'Operator "+" is reserved and not implemented, so this command is refused and nothing ran. ' +
+        'Remove "+" and send each prompt as its own command.'
     );
   });
 

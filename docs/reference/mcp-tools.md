@@ -75,13 +75,20 @@ MCP Resources provide a **read-only, token-efficient** alternative to tool-based
 </details>
 
 <details>
-<summary><strong>Observability Resources (Sessions, Metrics)</strong></summary>
+<summary><strong>Observability Resources (Sessions, Metrics, Logs)</strong></summary>
 
-| URI Pattern                    | Returns                    | Use Case                                    |
-| ------------------------------ | -------------------------- | ------------------------------------------- |
-| `resource://session/`          | Active chain sessions      | Context recovery - what chains are running? |
-| `resource://session/{chainId}` | Session state + progress   | Inspect chain for resumption                |
-| `resource://metrics/pipeline`  | Execution analytics (lean) | Observability - system health               |
+| URI Pattern                    | Returns                                                            | Use Case                                    |
+| ------------------------------ | ------------------------------------------------------------------ | ------------------------------------------- |
+| `resource://session/`          | Active chain sessions                                              | Context recovery - what chains are running? |
+| `resource://session/{chainId}` | Session state + progress                                           | Inspect chain for resumption                |
+| `resource://metrics/pipeline`  | Execution analytics (lean)                                         | Observability - system health               |
+| `resource://logs/`             | Latest 100 server log entries, newest first, with buffer stats     | Debugging - what did the server just do?    |
+| `resource://logs/{level}`      | Latest 100 entries at one level (`error`, `warn`, `info`, `debug`) | Debugging - find recent errors              |
+| `resource://logs/entry/{id}`   | One log entry with full details                                    | Inspect a single entry                      |
+
+> **Settings:** these URIs follow `resources.registerWithMcp` and
+> `resources.observability.enabled`; turning either off removes the logs URIs along with the
+> sessions and metrics ones. The server keeps the most recent 500 log entries in memory.
 
 > **Note:** Use the returned session URI: its final component percent-encodes the full chain ID,
 > such as `resource://session/chain-implementation_plan%2Fplan_table%231`. Reads decode that

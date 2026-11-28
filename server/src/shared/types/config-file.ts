@@ -281,10 +281,10 @@ interface ConfigFileGates {
    */
   frameworkGates?: boolean;
   /**
-   * Execute a prompt's gateConfiguration.inline_gate_definitions block instead of only displaying
-   * it. Off by default this release so an operator can watch the 'Dropped inline gate definition'
-   * warnings and see which workspace prompts would newly arm a gate; set true to opt in early. The
-   * next release makes true the default.
+   * Run a prompt's gateConfiguration.inline_gate_definitions as gates. With false, the definitions
+   * are loaded, validated and listed, but none gates a run; with true, every definition that passes
+   * validation is registered and reviewed. A malformed definition is dropped with a warning under
+   * either value.
    *
    * @default false
    */
@@ -530,10 +530,10 @@ interface ConfigFileResourceToggle {
   enabled?: boolean;
 }
 
-/** Observability resources (sessions and metrics). */
+/** Observability resources (sessions, metrics, and recent server logs). */
 interface ConfigFileObservabilityResources {
   /**
-   * Enable observability resources.
+   * Enable observability resources, including the recent server logs (resource://logs/...).
    *
    * @default true
    */
@@ -552,31 +552,6 @@ interface ConfigFileObservabilityResources {
   metrics?: boolean;
 }
 
-/** Logs resource for debugging and observability. */
-interface ConfigFileLogsResource {
-  /**
-   * Enable logs resource (resource://logs/).
-   *
-   * @default true
-   */
-  enabled?: boolean;
-  /**
-   * Maximum log entries to retain in memory.
-   *
-   * @asType integer
-   * @default 500
-   * @minimum 50
-   * @maximum 5000
-   */
-  maxEntries?: number;
-  /**
-   * Minimum level to buffer (entries below this level are not stored).
-   *
-   * @default "info"
-   */
-  defaultLevel?: ConfigFileLogLevel;
-}
-
 /**
  * MCP resources configuration. Master switch must be enabled for any resources to register.
  */
@@ -593,10 +568,8 @@ interface ConfigFileResources {
   gates?: ConfigFileResourceToggle;
   /** Framework resources (resource://framework/...). */
   frameworks?: ConfigFileResourceToggle;
-  /** Observability resources (sessions and metrics). */
+  /** Observability resources (sessions, metrics, and recent server logs). */
   observability?: ConfigFileObservabilityResources;
-  /** Logs resource for debugging and observability. */
-  logs?: ConfigFileLogsResource;
 }
 
 /**

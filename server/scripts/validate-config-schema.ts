@@ -37,7 +37,7 @@
  * WHY THE SELF-TEST EXISTS
  * Running clean proved almost nothing until 2026-09-11. `additionalProperties: false` sat at the
  * ROOT only, and every one of the 27 subsections left it unset — so `gates.enabld`,
- * `server.prot`, `resources.logs.maxEntrys` and `verification.isolation.tmeout` all validated,
+ * `server.prot`, `resources.observability.metrcs` and `verification.isolation.tmeout` all validated,
  * and the loader then silently defaulted each one. Every setting this file governs lives in a
  * subsection, so the strict gate guarded the only level with nothing in it.
  *
@@ -273,7 +273,7 @@ async function validateFixture(
  * The shipped `server/config.json` carries no sections — row 4.5 (ruling R46) made it exactly
  * `{$schema, version}`, because code owns every default now and a config.json holds only
  * OVERRIDES. `shipped` here is therefore that two-key object, not a full example: a case that
- * needs to mutate a nested key (`c.gates.enabld`, `c.resources.logs.maxEntrys`, …) must build the
+ * needs to mutate a nested key (`c.gates.enabld`, `c.resources.observability.metrcs`, …) must build the
  * section it needs itself (`c.gates ??= {}`) rather than assume `shipped` already populated it —
  * assigning through an absent parent throws `Cannot set properties of undefined`, it does not
  * silently no-op.
@@ -345,19 +345,19 @@ const SELF_TEST_CASES: readonly SelfTestCase[] = [
     },
   },
   {
-    name: 'depth 2 — resources.logs.maxEntrys is rejected',
+    name: 'depth 2 — resources.observability.metrcs is rejected',
     run: async (fixtureDir, shipped) => {
       const result = await validateFixture(
         fixtureDir,
         mutate(shipped, (c) => {
           c.resources ??= {};
-          c.resources.logs ??= {};
-          c.resources.logs.maxEntrys = 5;
+          c.resources.observability ??= {};
+          c.resources.observability.metrcs = true;
         })
       );
       assert(!result.valid, 'a misspelled key two levels down must be rejected');
       assert(
-        result.errors.some((error) => error.startsWith('/resources/logs')),
+        result.errors.some((error) => error.startsWith('/resources/observability')),
         `the error must name the nested section, got: ${result.errors.join('; ')}`
       );
     },

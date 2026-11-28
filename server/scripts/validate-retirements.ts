@@ -426,7 +426,7 @@ export function checkRuntimeProjection(
 
 /**
  * Check 6: third-state wording in user-facing text and in code strings, and promise wording in
- * user-facing text and the architecture pages, minus exemptions.
+ * user-facing text, code strings and the architecture pages, minus exemptions.
  */
 export function checkThirdStateWording(
   texts: readonly ScannedText[],
@@ -632,7 +632,7 @@ function main(): void {
   }
   const declared = Object.keys(declaredFiles).length;
   console.log(
-    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s) reading the projection and ${declared} declared file(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page and the runtime projection current, ${warnings.length} past its date; ${codeStrings.length} code file(s) and the user-facing text free of third-state wording, and the user-facing text and ${architectureTexts.length} architecture page(s) free of promise wording, outside its exemptions`
+    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s) reading the projection and ${declared} declared file(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page and the runtime projection current, ${warnings.length} past its date; ${codeStrings.length} code file(s) and the user-facing text free of third-state wording, and the same text plus ${architectureTexts.length} architecture page(s) free of promise wording, outside its exemptions`
   );
 }
 

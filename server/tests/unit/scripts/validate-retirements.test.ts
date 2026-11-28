@@ -692,15 +692,16 @@ describe('validate:retirements', () => {
           );
         });
 
-        it('reads code strings for third-state wording only, never for promise wording', () => {
+        it('fails a promise in a code string as well as third-state wording there', () => {
+          expect(subjects).toContain('server/src/notice.ts:1');
           expect(subjects).toContain('server/src/notice.ts:2');
-          expect(subjects).not.toContain('server/src/notice.ts:1');
         });
 
         it('fails nothing else', () => {
           expect([...new Set(subjects)].sort()).toEqual([
             'docs/architecture/overview.md:1',
             'docs/guides/gates.md:1',
+            'server/src/notice.ts:1',
             'server/src/notice.ts:2',
           ]);
         });

@@ -455,7 +455,6 @@ cpm enable resources --json         # resources.registerWithMcp = true (JSON out
 | `resources.gates`         | `resources.gates.enabled`         |
 | `resources.frameworks`    | `resources.frameworks.enabled`    |
 | `resources.observability` | `resources.observability.enabled` |
-| `resources.logs`          | `resources.logs.enabled`          |
 | `verification`            | `verification.isolation.enabled`  |
 
 Reports "already enabled/disabled" without writing when the value is unchanged. Exit codes: `0` success, `1` unknown subsystem or error.

@@ -157,7 +157,6 @@ describe('a prompt directory’s tools/ is reserved in every walk', () => {
 
   it('the startup baseline announces the twin beside tools/ and nothing inside it', async () => {
     const tracker = createResourceChangeTracker(logger as never, {
-      maxEntries: 1000,
       dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();

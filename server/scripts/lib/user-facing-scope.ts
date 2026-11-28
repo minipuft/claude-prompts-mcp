@@ -133,7 +133,7 @@ export function listUserFacingFiles(
 }
 
 /** The tracked architecture pages, each read in full as text; pure over the paths given. */
-export function selectArchitectureFiles(tracked: readonly string[]): UserFacingFile[] {
+function selectArchitectureFiles(tracked: readonly string[]): UserFacingFile[] {
   return tracked
     .filter((file) => isUnderTree(file, ARCHITECTURE_TREE))
     .map((file) => ({ file, kind: 'text' as const }));
