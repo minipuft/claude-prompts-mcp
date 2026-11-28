@@ -15,7 +15,7 @@ interface EnableDisableOptions {
  *
  * Every entry here used to name a `*.mode` key holding `"on"`/`"off"`. No reader consulted any of
  * them — the runtime reads the boolean below — and the write path assigns dot-keys verbatim, so
- * this command reported success and changed nothing for all ten subsystems. `resources` maps to
+ * this command reported success and changed nothing for all of them. `resources` maps to
  * `registerWithMcp` rather than `enabled` because `ResourcesConfig` has no top-level `enabled`;
  * `registerWithMcp` is that section's master switch.
  */
@@ -27,7 +27,6 @@ const SUBSYSTEM_MAP: Record<string, [string, string]> = {
   'resources.gates': ['resources.gates.enabled', 'Gate resources'],
   'resources.frameworks': ['resources.frameworks.enabled', 'Framework resources'],
   'resources.observability': ['resources.observability.enabled', 'Observability resources'],
-  'resources.logs': ['resources.logs.enabled', 'Log resources'],
   verification: ['verification.isolation.enabled', 'Verification isolation'],
   // `analysis` is gone. It mapped into the deprecated `analysis.semanticAnalysis.*` section, whose
   // readers were all retired; `CONFIG_VALID_KEYS` no longer accepts the key, so leaving the entry

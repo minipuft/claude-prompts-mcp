@@ -14,6 +14,10 @@
  *     names and enum values are the tool's own surface and are not prose.
  *   - exempt: the generated upgrade page, which is where a retired name is meant to be read, and
  *     the changelog, which is the record of what changed.
+ *
+ * The architecture pages are not in the set: they are contributor text that names old rows and
+ * old schemas on purpose. `listArchitectureFiles` returns them for the one question they share
+ * with user-facing text, whether a page promises a change instead of describing the product.
  */
 
 import { readFileSync } from 'node:fs';
@@ -55,6 +59,13 @@ const USER_FACING_SCOPE: UserFacingScope = {
     keys: ['description', 'shortDescription', 'summary'],
   },
   exempt: ['docs/reference/upgrading.md', 'CHANGELOG.md'],
+};
+
+/** Contributor pages read only for promise wording; see the module header. */
+const ARCHITECTURE_TREE: UserFacingScope['trees'][number] = {
+  root: 'docs/architecture/',
+  extensions: ['.md'],
+  except: [],
 };
 
 /** How a file's lines are read. */
@@ -119,6 +130,18 @@ export function listUserFacingFiles(
     scope.contracts.directory,
   ];
   return selectUserFacingFiles(trackedFilesUnder([...prefixes], { cwd: repoRoot }), scope);
+}
+
+/** The tracked architecture pages, each read in full as text; pure over the paths given. */
+function selectArchitectureFiles(tracked: readonly string[]): UserFacingFile[] {
+  return tracked
+    .filter((file) => isUnderTree(file, ARCHITECTURE_TREE))
+    .map((file) => ({ file, kind: 'text' as const }));
+}
+
+/** Every architecture page the index holds, from `git ls-files`. */
+export function listArchitectureFiles(repoRoot: string): UserFacingFile[] {
+  return selectArchitectureFiles(trackedFilesUnder([ARCHITECTURE_TREE.root], { cwd: repoRoot }));
 }
 
 /**

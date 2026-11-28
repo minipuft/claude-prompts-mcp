@@ -39,7 +39,7 @@ function buildUri(pattern: string, id?: string): string {
 }
 
 /**
- * Register observability-related MCP resources (sessions and metrics).
+ * Register observability-related MCP resources (sessions, metrics, telemetry status, and logs).
  *
  * Resources read from managers at request time to ensure
  * hot-reload compatibility and real-time data.

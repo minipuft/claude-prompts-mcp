@@ -377,7 +377,7 @@ describe('resolveRequestIdentityContext', () => {
     expect(context.provenance?.overrideAttempted).toBe(true);
   });
 
-  test('client profile prefers launch defaults over trusted metadata and request hint', () => {
+  test('client profile prefers launch defaults over trusted metadata', () => {
     const context = resolveRequestIdentityContext(
       httpExtra({
         authInfo: {
@@ -399,10 +399,6 @@ describe('resolveRequestIdentityContext', () => {
           clientFamily: 'claude-code',
           clientId: 'claude-launch',
           delegationProfile: 'task_tool_v1',
-        },
-        requestClientProfileHint: {
-          clientFamily: 'unknown',
-          delegationProfile: 'neutral_v1',
         },
       }
     );
@@ -439,25 +435,6 @@ describe('resolveRequestIdentityContext', () => {
       delegationProfile: 'spawn_agent_v1',
     });
     expect(context.provenance?.clientProfileSource).toBe('trusted-request');
-  });
-
-  test('client profile uses request hint when trusted metadata is unavailable', () => {
-    const context = resolveRequestIdentityContext(undefined, {
-      mode: 'permissive',
-      allowPerRequestOverride: true,
-      requestClientProfileHint: {
-        clientFamily: 'codex',
-        clientId: 'codex-hint',
-        delegationProfile: 'spawn_agent_v1',
-      },
-    });
-
-    expect(context.clientProfile).toMatchObject({
-      clientFamily: 'codex',
-      clientId: 'codex-hint',
-      delegationProfile: 'spawn_agent_v1',
-    });
-    expect(context.provenance?.clientProfileSource).toBe('request-hint');
   });
 
   test('client profile falls back to clientInfo heuristic, then unknown default', () => {

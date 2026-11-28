@@ -199,10 +199,10 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //     — default: true
 //     "frameworkGates": true,
 
-//     — Execute a prompt's gateConfiguration.inline_gate_definitions block instead of only
-//       displaying it. Off by default this release so an operator can watch the 'Dropped inline
-//       gate definition' warnings and see which workspace prompts would newly arm a gate; set
-//       true to opt in early. The next release makes true the default.
+//     — Run a prompt's gateConfiguration.inline_gate_definitions as gates. With false, the
+//       definitions are loaded, validated and listed, but none gates a run; with true, every
+//       definition that passes validation is registered and reviewed. A malformed definition is
+//       dropped with a warning under either value.
 //     — default: false
 //     "executeInlineGateDefinitions": false,
 
@@ -398,9 +398,10 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //       "enabled": true,
 //     },
 
-//     — Observability resources (sessions and metrics).
+//     — Observability resources (sessions, metrics, and recent server logs).
 //     "observability": {
-//       — Enable observability resources.
+//       — Enable observability resources, including the recent server logs
+//         (resource://logs/...).
 //       — default: true
 //       "enabled": true,
 
@@ -411,22 +412,6 @@ export const CONFIG_JSONC_TEMPLATE: string = `// Configuration for the claude-pr
 //       — Enable metrics resources (resource://metrics/...).
 //       — default: true
 //       "metrics": true,
-//     },
-
-//     — Logs resource for debugging and observability.
-//     "logs": {
-//       — Enable logs resource (resource://logs/).
-//       — default: true
-//       "enabled": true,
-
-//       — Maximum log entries to retain in memory.
-//       — default: 500, minimum: 50, maximum: 5000
-//       "maxEntries": 500,
-
-//       — Minimum level to buffer (entries below this level are not stored).
-//       — default: "info"
-//       — one of: "error", "warn", "info", "debug"
-//       "defaultLevel": "info",
 //     },
 //   },
 

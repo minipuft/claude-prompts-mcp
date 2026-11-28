@@ -158,7 +158,6 @@ describe('prompt walks agree about the prompts root and about _-prefixed directo
 
   it('the startup baseline announces exactly what the catalog serves', async () => {
     const tracker = createResourceChangeTracker(logger as never, {
-      maxEntries: 1000,
       dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();

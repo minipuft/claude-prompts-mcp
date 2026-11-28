@@ -119,7 +119,6 @@ describe('compareResourceBaseline refusal awareness', () => {
     // A tracker per test, each loading its hash cache from the table just cleared above. Sharing
     // one across cases would carry the previous case's cache into this one's first comparison.
     tracker = createResourceChangeTracker(logger as never, {
-      maxEntries: 1000,
       dbPath: path.join(TEST_DIR, 'runtime-state', 'state.db'),
     });
     await tracker.initialize();

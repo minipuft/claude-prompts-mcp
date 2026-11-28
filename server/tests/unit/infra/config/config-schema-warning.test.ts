@@ -155,13 +155,13 @@ describe('config schema validation warnings', () => {
     expect(manager.getSchemaValidation()).toMatchObject({ status: 'invalid', valid: false });
 
     // Step 3: a second typo added, reloaded — 2 warnings (the whole new set); still 'invalid'.
-    // Same defensive init as step 1: `resources`/`resources.logs` are no longer guaranteed
-    // present either.
+    // Same defensive init as step 1: `resources`/`resources.observability` are no longer
+    // guaranteed present either.
     warnSpy.mockClear();
     const withTwoTypos = mutate(withTypo, (c) => {
       c.resources ??= {};
-      c.resources.logs ??= {};
-      c.resources.logs.maxEntrys = 5;
+      c.resources.observability ??= {};
+      c.resources.observability.metrcs = true;
     });
     await writeFile(configPath, JSON.stringify(withTwoTypos), 'utf8');
     await manager.loadConfig();
@@ -170,7 +170,7 @@ describe('config schema validation warnings', () => {
     expect(warnings).toHaveLength(2);
     expect(warnings.some((line) => line.includes('/gates') && line.includes('enabld'))).toBe(true);
     expect(
-      warnings.some((line) => line.includes('/resources/logs') && line.includes('maxEntrys'))
+      warnings.some((line) => line.includes('/resources/observability') && line.includes('metrcs'))
     ).toBe(true);
     expect(manager.getSchemaValidation()).toMatchObject({ status: 'invalid', valid: false });
 

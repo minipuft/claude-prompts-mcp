@@ -11,7 +11,7 @@
  *
  * Pure: it reads the prompt, the run's processed arguments and a lookup, and returns a value. The
  * run's arguments are passed by reference on purpose — a step that declares no `args` shares the
- * run's object, so a caller that merges request `options`/`inputs` into it afterwards reaches that
+ * run's object, so a caller that merges request `inputs` into it afterwards reaches that
  * step too, exactly as the direct path always behaved.
  */
 

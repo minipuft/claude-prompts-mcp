@@ -34,6 +34,7 @@ import {
   findRetirementSites,
   readDeclaredSiteFiles,
   runRetirementChecks,
+  scanArchitectureText,
   scanRefusalSites,
   scanUserFacingText,
 } from '../../../scripts/validate-retirements.js';
@@ -59,6 +60,9 @@ const PROJECTION = 'export const plantedEntry = {};\n';
 const PROJECTION_FILE = `server/${RETIREMENT_PROJECTION}`;
 const PHRASES = loadWordingRules(REPO_ROOT).phrases;
 const TWO_STATES = 'The product has two states for a spelling, accepted or refused';
+const DESCRIBE_TODAY = 'Describe what the product does today; a planned change lives in a plan';
+const PROMISE =
+  'Inline definitions run only when the key is on; the default flips in the next release.';
 
 const git = (cwd: string, ...args: string[]): void => {
   const env = Object.fromEntries(
@@ -627,6 +631,83 @@ describe('validate:retirements', () => {
       });
     });
 
+    describe('promise wording', () => {
+      it('fails a guide line promising the next release, naming the file, the line and the phrase', () => {
+        const texts = [{ file: 'docs/guides/gates.md', lines: [{ line: 4, text: PROMISE }] }];
+
+        const failures = runRetirementChecks(clean({ texts })).failures;
+
+        expect(failures.map((finding) => finding.subject)).toEqual([
+          'docs/guides/gates.md:4',
+          'docs/guides/gates.md:4',
+        ]);
+        expect(failures.map((finding) => finding.message)).toEqual([
+          expect.stringContaining('docs/guides/gates.md:4: "next release" (future-release)'),
+          expect.stringContaining('docs/guides/gates.md:4: "default flips" (default-flips)'),
+        ]);
+        expect(failures.every((finding) => finding.check === 6)).toBe(true);
+        expect(failures.every((finding) => finding.message.includes(DESCRIBE_TODAY))).toBe(true);
+        expect(failures.some((finding) => finding.message.includes(TWO_STATES))).toBe(false);
+      });
+
+      describe('over a planted repository', () => {
+        let root = '';
+        let subjects: string[] = [];
+
+        beforeAll(() => {
+          root = mkdtempSync(path.join(tmpdir(), 'retirement-promise-'));
+          plant(root, 'docs/guides/gates.md', `${PROMISE}\n`);
+          plant(root, 'docs/adr/0001-gates.md', `${PROMISE}\n`);
+          plant(root, 'docs/architecture/overview.md', `${PROMISE}\n`);
+          plant(root, 'docs/concepts/runs.md', 'After an abort the run is no longer active.\n');
+          plant(
+            root,
+            'server/src/notice.ts',
+            "export const promise = 'the default flips in the next release';\nexport const old = '--old-flag is deprecated';\n"
+          );
+          git(root, 'init', '-q');
+          git(root, 'add', '-A');
+          subjects = runRetirementChecks(
+            clean({
+              texts: scanUserFacingText(root),
+              architectureTexts: scanArchitectureText(root),
+              codeStrings: scanCodeStrings(root),
+            })
+          ).failures.map((finding) => finding.subject);
+        });
+
+        afterAll(() => {
+          rmSync(root, { recursive: true, force: true });
+        });
+
+        it('fails the promise in a guide and in an architecture page', () => {
+          expect(subjects).toContain('docs/guides/gates.md:1');
+          expect(subjects).toContain('docs/architecture/overview.md:1');
+        });
+
+        it('passes the same sentence in docs/adr and an honest neighbour that only says no longer', () => {
+          expect(subjects.some((subject) => subject.startsWith('docs/adr/'))).toBe(false);
+          expect(subjects.some((subject) => subject.startsWith('docs/concepts/runs.md'))).toBe(
+            false
+          );
+        });
+
+        it('fails a promise in a code string as well as third-state wording there', () => {
+          expect(subjects).toContain('server/src/notice.ts:1');
+          expect(subjects).toContain('server/src/notice.ts:2');
+        });
+
+        it('fails nothing else', () => {
+          expect([...new Set(subjects)].sort()).toEqual([
+            'docs/architecture/overview.md:1',
+            'docs/guides/gates.md:1',
+            'server/src/notice.ts:1',
+            'server/src/notice.ts:2',
+          ]);
+        });
+      });
+    });
+
     describe('exemptions', () => {
       const exemption = {
         id: 'old-flag-not-yet-retired',
@@ -676,6 +757,7 @@ describe('validate:retirements', () => {
     const sites = scanRefusalSites();
     const driverIds = findDriverIds(readFileSync(path.join(REPO_ROOT, DRIVER_FILE), 'utf8'));
     const texts = scanUserFacingText(REPO_ROOT);
+    const architectureTexts = scanArchitectureText(REPO_ROOT);
     const codeStrings = scanCodeStrings(REPO_ROOT);
 
     const declaredFiles = readDeclaredSiteFiles(entries);
@@ -690,6 +772,9 @@ describe('validate:retirements', () => {
     expect(texts.map((text) => text.file)).toEqual(
       expect.arrayContaining(['README.md', 'docs/reference/configuration.md'])
     );
+    expect(architectureTexts.map((text) => text.file)).toEqual(
+      expect.arrayContaining(['docs/architecture/overview.md'])
+    );
     expect([...(driverIds ?? [])].sort()).toEqual(entries.map((entry) => entry.id).sort());
     expect(codeStrings.map((source) => source.file)).toEqual(
       expect.arrayContaining(['server/src/index.ts', 'cli/src/index.ts', 'hooks/gate-enforce.py'])
@@ -702,6 +787,7 @@ describe('validate:retirements', () => {
         driverIds,
         texts,
         codeStrings,
+        architectureTexts,
         wording: loadWordingRules(REPO_ROOT),
         expectedPage: renderUpgradingPage(entries),
         upgradingPage: readFileSync(path.join(REPO_ROOT, UPGRADING_PAGE), 'utf8'),

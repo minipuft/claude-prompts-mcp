@@ -678,7 +678,7 @@ const promptEngineAdapter = {
   router: 'index.ts',
   pipeline: '../../engine/execution',
   exempt: new Set(),
-  minimumReads: 20,
+  minimumReads: 19,
   boundary:
     'the request the executor hands the pipeline — a field copied into it must be read by the ' +
     'execution context or some stage',

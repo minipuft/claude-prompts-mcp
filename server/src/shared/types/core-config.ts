@@ -248,20 +248,12 @@ export interface GatesConfig {
   /** config.json key: enable framework-specific quality gates */
   frameworkGates: boolean;
   /**
-   * Execute a prompt's `inline_gate_definitions` instead of only displaying them.
+   * Run a prompt's `inline_gate_definitions` as gates. Default `false`.
    *
-   * **Default `false`, and that default is the migration.** ADR 0001 (d) sequences this over two
-   * releases: this release logs a warning for every malformed definition it drops so an operator
-   * can see which of their workspace prompts would newly arm a gate; the next release flips this
-   * default to `true`. Arming enforcement an author may have written and forgotten is the risk
-   * being ramped, and workspaces overlaid via `MCP_WORKSPACE` cannot be inventoried from here.
-   *
-   * Retirement, per `cleanup-standards.md` — a gate that cannot be retired is a bug:
-   * - **Evidence that flips it**: one release in which the warn logs show no unexpected prompts
-   *   arming gates.
-   * - **Commit that deletes it**: the release N+1 change bakes `true` and removes this field
-   *   together with the `executeInlineGateDefinitions === true` branches. A knob parked at its
-   *   baked value is a parallel system with a nicer name.
+   * With `false`, the definitions are loaded, validated and listed by `resource_manager` `inspect`,
+   * but none is registered as a gate and no step is reviewed against one. With `true`, every
+   * definition that passes validation is registered and reviewed. A malformed definition is
+   * dropped with a `Dropped inline gate definition` warning under either value.
    */
   executeInlineGateDefinitions: boolean;
   /** Judge evaluation defaults — gates with `evaluation.mode: 'judge'` use context-isolated review */
@@ -337,11 +329,6 @@ export interface ResourcesConfig {
     enabled?: boolean;
     sessions?: boolean;
     metrics?: boolean;
-  };
-  logs?: {
-    enabled?: boolean;
-    maxEntries?: number;
-    defaultLevel?: 'error' | 'warn' | 'info' | 'debug';
   };
 }
 

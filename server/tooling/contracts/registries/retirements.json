@@ -192,6 +192,15 @@
           "marker": "Refused; send enforcement_mode instead."
         }
       ]
+    },
+    {
+      "id": "prompt-engine-options",
+      "kind": "tool-parameter",
+      "retired": "the `options` parameter of `prompt_engine`",
+      "replacement": "`inputs` for prompt argument values; a client profile is set at launch with `--client` or `identity.launchDefaults` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`), or arrives in trusted request metadata (`authInfo.extra` or `x-client-*` headers)",
+      "refusedIn": "6.0.0",
+      "forgetAfter": "2027-06-01",
+      "docPattern": "\\boptions\\s*:\\s*\\{|\"options\"\\s*:\\s*\\{|\\boptions\\.client_profile\\b"
     }
   ]
 }

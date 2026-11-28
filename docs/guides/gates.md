@@ -419,7 +419,7 @@ and its file is quarantined like any other refused gate, when an example:
 
 The refusal names the gate, the example's index, the path and the rule, for example
 `examples.1.file: example file 'examples/fail-no-ticket.md' does not exist in the gate directory
-(<gate dir>/examples/fail-no-ticket.md)`. A gate without `examples:` loads exactly as before.
+(<gate dir>/examples/fail-no-ticket.md)`. A gate without `examples:` has nothing to check here.
 
 ### What `validate` runs, and what it does not
 
@@ -589,7 +589,6 @@ No node, trailer, report, retry exhaustion or command is required. The run moves
 `cancelled`, retaining its state and artifacts; a later resume answers "Chain run already complete".
 Repeated abort succeeds for an already-cancelled run. Completed, failed, missing or out-of-scope
 runs return a non-applied refusal. Start a fresh run with the chain command or `force_restart`.
-The public `cancel` property has been removed; use the abort call above.
 
 ## Verdicts and reminders
 

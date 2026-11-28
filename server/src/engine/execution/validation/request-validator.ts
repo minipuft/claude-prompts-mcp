@@ -127,10 +127,6 @@ export class McpToolRequestValidator {
       result.gates = partialRequest.gates;
     }
 
-    if (partialRequest.options !== undefined) {
-      result.options = partialRequest.options;
-    }
-
     if (partialRequest.inputs !== undefined) {
       result.inputs = partialRequest.inputs;
     }

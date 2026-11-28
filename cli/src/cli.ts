@@ -388,7 +388,6 @@ Subsystems:
   resources.gates           Gate resources (resources.gates.enabled)
   resources.frameworks      Framework resources (resources.frameworks.enabled)
   resources.observability   Observability resources (resources.observability.enabled)
-  resources.logs            Log resources (resources.logs.enabled)
   verification              Verification isolation (verification.isolation.enabled)
 
 Options:
@@ -412,7 +411,7 @@ Options:
 
 Examples:
   cpm disable gates
-  cpm disable resources.logs -w server`,
+  cpm disable resources.observability -w server`,
 
   config: `cpm config - Manage workspace configuration
 

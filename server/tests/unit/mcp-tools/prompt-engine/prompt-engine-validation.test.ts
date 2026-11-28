@@ -181,16 +181,12 @@ describe('PromptEngine Validation', () => {
       note: String.raw`C:\art\refs and "quotes"`,
     };
 
-    await engine.executePromptCommand(
-      { command: '>>art_prompt mode="inline"', inputs, options: { mode: 'legacy' } },
-      {}
-    );
+    await engine.executePromptCommand({ command: '>>art_prompt mode="inline"', inputs }, {});
 
     expect(execute).toHaveBeenCalledWith(
       expect.objectContaining({
         command: '>>art_prompt mode="inline"',
         inputs,
-        options: { mode: 'legacy' },
       })
     );
     const forwardedRequest = execute.mock.calls[0]?.[0] as { command: string } | undefined;
@@ -847,7 +843,6 @@ describe('PromptEngine Validation', () => {
       ['handoff', false],
       ['claim_token', 't'],
       ['inputs', {}],
-      ['options', {}],
       ['gates', []],
     ] as const)('in process, pause or resume with %s is refused unchanged', async (key, value) => {
       await store().createSession(RUN, CHAIN, 2);

@@ -93,19 +93,11 @@ describe('validateConfigInput', () => {
       expect(result.error).toContain('between 1024 and 65535');
     });
 
-    it('rejects a value above the leaf maximum', () => {
-      // `resources.logs.maxEntries` carries `@minimum 50 @maximum 5000` on its ConfigFile member.
-      const result = validateConfigInput('resources.logs.maxEntries', '6000');
-
-      expect(result.valid).toBe(false);
-      expect(result.error).toContain('between 50 and 5000');
-    });
-
     it('rejects a value below the leaf minimum', () => {
-      const result = validateConfigInput('resources.logs.maxEntries', '10');
+      const result = validateConfigInput('server.port', '80');
 
       expect(result.valid).toBe(false);
-      expect(result.error).toContain('between 50 and 5000');
+      expect(result.error).toContain('between 1024 and 65535');
     });
 
     it('parses a float leaf without truncating it', () => {

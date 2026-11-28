@@ -65,9 +65,6 @@ export const CONFIG_VALID_KEYS = [
   'prompts.registerWithMcp',
   'resources.frameworks.enabled',
   'resources.gates.enabled',
-  'resources.logs.defaultLevel',
-  'resources.logs.enabled',
-  'resources.logs.maxEntries',
   'resources.observability.enabled',
   'resources.observability.metrics',
   'resources.observability.sessions',
@@ -259,18 +256,6 @@ export const CONFIG_KEY_TABLE: Readonly<Record<ConfigKey, ConfigLeafRule>> = {
   },
   'resources.gates.enabled': {
     type: 'boolean',
-  },
-  'resources.logs.defaultLevel': {
-    type: 'string',
-    enum: ['error', 'warn', 'info', 'debug'],
-  },
-  'resources.logs.enabled': {
-    type: 'boolean',
-  },
-  'resources.logs.maxEntries': {
-    type: 'integer',
-    minimum: 50,
-    maximum: 5000,
   },
   'resources.observability.enabled': {
     type: 'boolean',

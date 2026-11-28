@@ -106,7 +106,7 @@ evaluation and declarability per criterion:
 | `max_length`      | yes                    | An unstated ceiling is invisible until breached and cannot be fixed in-turn |
 | `min_length`      | no (evaluated only)    | Retry feedback already names the exact threshold — not worth the token cost |
 | `forbidden_terms` | **never**              | Declaring what is rejected hands over the evasion target                    |
-| `matches_pattern` | **never**              | Same — and the natural home for a future sensitive-data check               |
+| `matches_pattern` | **never**              | Same                                                                        |
 
 `required` is not in this table: it addresses _which_ header must be present, not what its content
 must satisfy, so it is not a criterion. The two negative criteria carry `declare?: never` in their

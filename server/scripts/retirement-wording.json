@@ -34,6 +34,48 @@
       "id": "old-name-alias",
       "pattern": "\\b(?:compat(?:ibility)?|old|former|previous) (?:name )?alias(?:es)?\\b",
       "catches": "an old name kept as an alias of the current one"
+    },
+    {
+      "id": "future-release",
+      "kind": "promise",
+      "pattern": "\\b(?:(?:next|future|upcoming|coming|subsequent) (?:release|version|major|minor)|later (?:release|major))s?\\b",
+      "catches": "a change scheduled for a release that has not shipped: \"in the next release\", \"a future version\", \"the next major\""
+    },
+    {
+      "id": "this-release",
+      "kind": "promise",
+      "pattern": "\\b(?:in|until|before|after|since|from|by) this release\\b|\\bthis release (?:warns|ships|adds|keeps|makes)\\b|\\bone release ahead\\b|\\bwarn-then-arm\\b",
+      "catches": "a transition described from inside one release: \"in this release\", \"until this release\", \"one release ahead\", \"warn-then-arm\""
+    },
+    {
+      "id": "will-change",
+      "kind": "promise",
+      "pattern": "\\bwill (?:be |soon be |eventually be )?(?:removed|changed|flipped|deprecated|retired|renamed)\\b",
+      "catches": "a promised change to the product: \"will be removed\", \"will be renamed\", \"will be flipped\""
+    },
+    {
+      "id": "default-flips",
+      "kind": "promise",
+      "pattern": "\\bdefault (?:flips|will (?:flip|change|become))\\b",
+      "catches": "a default described as about to change: \"the default flips\", \"the default will become\""
+    },
+    {
+      "id": "coming-soon",
+      "kind": "promise",
+      "pattern": "\\bcoming soon\\b",
+      "catches": "a feature announced before it exists"
+    },
+    {
+      "id": "for-now",
+      "kind": "promise",
+      "pattern": "\\bfor now\\b|\\bfor the time being\\b|\\bin the interim\\b|\\btemporarily\\b",
+      "catches": "current behaviour labelled as a temporary state: \"for now\", \"for the time being\", \"in the interim\", \"temporarily\""
+    },
+    {
+      "id": "not-yet-implemented",
+      "kind": "promise",
+      "pattern": "\\bnot yet (?:implemented|supported|available|wired)\\b",
+      "catches": "a missing capability described as on its way: \"not yet implemented\", \"not yet supported\""
     }
   ],
   "exemptions": [
@@ -53,6 +95,19 @@
       "reason": "the word names something in the user's own project, not a spelling of this product: a Keep a Changelog category, and a marker the integration gate tells the reviewer to search the change for",
       "asOf": "2026-11-27",
       "removeWhen": "either gate's guidance stops naming the word"
+    },
+    {
+      "id": "roadmap-page",
+      "phrase": "this-release",
+      "sites": [
+        {
+          "file": "docs/TODO.md",
+          "lines": 1
+        }
+      ],
+      "reason": "the page is a roadmap and issue log, forward-looking by purpose; its open item on inline gate definitions quotes the migration plan it was resolved by",
+      "asOf": "2026-11-28",
+      "removeWhen": "docs/TODO.md is deleted or its content moves under plans/"
     }
   ]
 }

@@ -9,7 +9,6 @@
  *
  * const tracker = createResourceChangeTracker(logger, {
  *   dbPath: pathResolver.getStateDatabasePath(),
- *   maxEntries: 1000,
  * });
  *
  * await tracker.initialize();

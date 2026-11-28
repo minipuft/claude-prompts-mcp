@@ -455,7 +455,6 @@ cpm enable resources --json         # resources.registerWithMcp = true (JSON out
 | `resources.gates`         | `resources.gates.enabled`         |
 | `resources.frameworks`    | `resources.frameworks.enabled`    |
 | `resources.observability` | `resources.observability.enabled` |
-| `resources.logs`          | `resources.logs.enabled`          |
 | `verification`            | `verification.isolation.enabled`  |
 
 Reports "already enabled/disabled" without writing when the value is unchanged. Exit codes: `0` success, `1` unknown subsystem or error.
@@ -533,6 +532,6 @@ cli/
 
 The `server/src/cli-shared/` barrel re-exports validation schemas, YAML utilities, version-history functions, resource scaffolding, and config operations. It reaches schema and utility modules in `shared/`, `engine/`, and `modules/` through the usual `#`-subpath specifiers; what it may not reach, at any depth, is `infra/`, `runtime/`, or `mcp/` — transport, config loading, and logging would otherwise land in the CLI's own bundle. The dependency-cruiser rule `cli-shared-no-runtime` enforces that as a `reachable` rule over the whole closure, and `tests/unit/cli-shared/import-isolation.test.ts` cruises the barrel on its own. The rule was added 2026-09-15; this paragraph and the barrel's header had cited it by name before it existed, and described the barrel as using only relative imports, which it never did.
 
-Config validation logic (`CONFIG_VALID_KEYS`, `validateConfigInput`) lives in `cli-shared/config-input-validator.ts`, which the CLI's `config` commands read — 59 keys today. The server's `mcp/tools/config-utils.ts` is not a re-export of that file: it defines its own separate `CONFIG_VALID_KEYS`/`validateConfigInput`, a smaller, strict subset (19 keys) used only by the `system_control` config action's per-key `validate` check. A later release generates one list from the `ConfigFile` type instead of hand-maintaining both. Config file operations (`readConfig`, `setConfigValue`, `initConfig`, etc.) live in `cli-shared/config-operations.ts` using only `node:fs` and `node:path`.
+Config validation logic (`CONFIG_VALID_KEYS`, `validateConfigInput`) lives in `cli-shared/config-input-validator.ts`, against one table generated from the `ConfigFile` type (`cli-shared/_generated/config-keys.ts`, written by `npm run generate:config-schema`). The CLI's `config` commands and the `system_control` config action validate a key against that same table; the server's `mcp/tools/config-utils.ts` imports the validator and holds no key list of its own. Config file operations (`readConfig`, `setConfigValue`, `initConfig`, etc.) live in `cli-shared/config-operations.ts` using only `node:fs` and `node:path`.
 
 Versioning types (`VersionEntry`, `HistoryFile`, etc.) from `modules/versioning/types.ts` are pure interfaces — safe to re-export. Standalone functions in `cli-shared/version-history.ts` mirror `VersionHistoryService` against SQLite state and avoid runtime imports from MCP server modules.

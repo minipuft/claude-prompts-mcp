@@ -70,7 +70,6 @@ export async function initializeResourceChangeTracker(
 
   trackerInstance = createResourceChangeTracker(logger, {
     dbPath,
-    maxEntries: 1000,
     trackPrompts: true,
     trackGates: true,
     ...(defaultScope !== undefined ? { defaultScope } : {}),

@@ -75,7 +75,6 @@ const ON_OFF_KEYS: readonly MovedKey[] = [
     'resources.gates',
     'resources.frameworks',
     'resources.observability',
-    'resources.logs',
     'verification.isolation',
     'versioning',
   ].map(modeToEnabled),
@@ -91,6 +90,7 @@ const REMOVED_KEYS: Readonly<Record<string, string>> = {
     retirementNotices.configServerTransport.replacement,
   'gates.enforcePendingVerdict': NOTHING_REPLACES_IT,
   'resources.prompts.defaultRegistration': NOTHING_REPLACES_IT,
+  'resources.logs': NOTHING_REPLACES_IT,
   analysis: `remove the section; use ${retirementNotices.configAnalysisSection.replacement}`,
   'gates.directory':
     'remove it; gates are read from the gates/ folder of each location in "paths.resources"',

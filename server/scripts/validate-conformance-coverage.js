@@ -176,13 +176,6 @@ const PARAMETER_COVERAGE_EXCEPTIONS = [
     'A conformance scenario that submits `gates:` on a chain-triggering prompt and drives the ' +
       'resulting gate_verdict resume to completion, mirroring chain-lifecycle.yaml.'
   ),
-  ...exceptionGroup(
-    'prompt_engine',
-    ['options'],
-    '`options` is an open `record` "forwarded downstream" with no single observable effect ' +
-      'documented in the contract to assert against.',
-    'A conformance scenario once `options` gains a documented, corpus-assertable effect.'
-  ),
   // `observations` and `remainder` each had an exception here until 2026-08-30, both retired by
   // `conformance/unknown-interrupt.yaml` (plan row 0.5) rather than edited. `remainder`'s own
   // `closedBy` named that scenario; `observations`' was carried out with it, because the same

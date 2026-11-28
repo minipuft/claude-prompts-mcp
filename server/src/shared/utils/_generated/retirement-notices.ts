@@ -129,3 +129,11 @@ export const scriptToolTriggerParameterMatch: RetirementNotice = {
   replacement: '`trigger: schema_match`',
   refusedIn: '6.0.0',
 };
+
+/** prompt-engine-options */
+export const promptEngineOptions: RetirementNotice = {
+  retired: 'the `options` parameter of `prompt_engine`',
+  replacement:
+    '`inputs` for prompt argument values; a client profile is set at launch with `--client` or `identity.launchDefaults` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`), or arrives in trusted request metadata (`authInfo.extra` or `x-client-*` headers)',
+  refusedIn: '6.0.0',
+};

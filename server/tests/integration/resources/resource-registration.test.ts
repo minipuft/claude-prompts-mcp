@@ -1074,7 +1074,6 @@ describe('registerMcpResources session lookup forwarding', () => {
           gates: { enabled: false },
           frameworks: { enabled: false },
           observability: { enabled: true, sessions: true, metrics: true },
-          logs: { enabled: false },
         }),
       },
       frameworkStateStore: { getFrameworkManager: () => undefined },

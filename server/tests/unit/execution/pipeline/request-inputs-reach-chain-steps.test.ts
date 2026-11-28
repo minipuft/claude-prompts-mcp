@@ -70,15 +70,10 @@ const stage = new CommandParsingStage(
   new SymbolicCommandBuilder(argumentParser, logger, irPort)
 );
 
-/** Stage 04 over a command and the request's `inputs`/`options`, as stage 01 hands them over. */
-async function parse(
-  command: string,
-  inputs?: Record<string, unknown>,
-  options?: Record<string, unknown>
-): Promise<ParsedCommand> {
-  const context = new PromptRequestContext({ command, inputs, options } as never);
+/** Stage 04 over a command and the request's `inputs`, as stage 01 hands them over. */
+async function parse(command: string, inputs?: Record<string, unknown>): Promise<ParsedCommand> {
+  const context = new PromptRequestContext({ command, inputs } as never);
   if (inputs !== undefined) context.state.normalization.requestInputs = inputs;
-  if (options !== undefined) context.state.normalization.requestOptions = options;
   await stage.execute(context);
   if (context.parsedCommand === undefined) {
     throw new Error(`no parsed command for ${command}`);
@@ -101,12 +96,11 @@ describe('inputs on a chain command reach the first step', () => {
     expect(parsed.promptArgs).toMatchObject({ feature: 'F-typed', research_focus: 'R-typed' });
   });
 
-  test('inline beats inputs beats options on the first segment', async () => {
-    const parsed = await parse(
-      `>>ri_planner feature:"F-inline"${ARROW}>>ri_consumer`,
-      { feature: 'F-typed', research_focus: 'R-typed' },
-      { feature: 'F-legacy', research_focus: 'R-legacy' }
-    );
+  test('inline beats inputs on the first segment', async () => {
+    const parsed = await parse(`>>ri_planner feature:"F-inline"${ARROW}>>ri_consumer`, {
+      feature: 'F-typed',
+      research_focus: 'R-typed',
+    });
 
     expect(parsed.steps?.[0]?.args).toMatchObject({
       feature: 'F-inline',

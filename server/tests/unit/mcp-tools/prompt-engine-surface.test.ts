@@ -24,7 +24,7 @@ import type { ToolSurfaceState } from '../../../src/mcp/tools/schemas/prompt-eng
  */
 
 const GATE_PARAMS = ['gates', 'gate_verdict'] as const;
-const CORE_PARAMS = ['command', 'force_restart', 'chain_id', 'user_response', 'options'] as const;
+const CORE_PARAMS = ['command', 'force_restart', 'chain_id', 'user_response', 'inputs'] as const;
 
 function build(state?: ToolSurfaceState) {
   return buildPromptEngineSchema(state != null ? { state } : {});
@@ -149,8 +149,6 @@ describe('prompt_engine parameter surface', () => {
       ['claim_token (empty)', { claim_token: '' }],
       ['inputs', { inputs: { topic: 'x' } }],
       ['inputs (empty)', { inputs: {} }],
-      ['options', { options: { mode: 'x' } }],
-      ['options (empty)', { options: {} }],
       ['gates', { gates: ['some-gate'] }],
       ['gates (empty)', { gates: [] }],
     ];
@@ -187,7 +185,6 @@ describe('prompt_engine parameter surface', () => {
         [action, 'observations', { observations: [] }],
         [action, 'gate_verdict', { gate_verdict: VERDICT }],
         [action, 'inputs', { inputs: {} }],
-        [action, 'options', { options: {} }],
         [action, 'gates', { gates: [] }],
       ]) as Array<[string, string, Record<string, unknown>]>
     )(
@@ -260,6 +257,17 @@ describe('prompt_engine parameter surface', () => {
     for (const param of CORE_PARAMS) {
       expect(enabled).toContain(param);
       expect(disabled).toContain(param);
+    }
+  });
+
+  test('advertises no options parameter in either state; the key still arrives to be refused', () => {
+    for (const enabled of [true, false]) {
+      expect(advertisedKeys({ gateSystemEnabled: enabled })).not.toContain('options');
+      const parsed = build({ gateSystemEnabled: enabled }).safeParse({
+        command: '>>demo',
+        options: { topic: 'x' },
+      });
+      expect(parsed.success && parsed.data).toMatchObject({ options: { topic: 'x' } });
     }
   });
 

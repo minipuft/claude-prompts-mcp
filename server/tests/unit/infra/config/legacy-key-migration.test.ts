@@ -256,7 +256,6 @@ describe('legacy config key migration', () => {
         'resources.gates.enabled',
         'resources.frameworks.enabled',
         'resources.observability.enabled',
-        'resources.logs.enabled',
         'verification.isolation.enabled',
         'versioning.enabled',
         'versioning.autoVersion',

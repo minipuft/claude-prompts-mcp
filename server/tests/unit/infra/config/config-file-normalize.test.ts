@@ -234,7 +234,6 @@ describe('config file -> runtime config mapping', () => {
         gates: { enabled: true },
         frameworks: { enabled: true },
         observability: { enabled: true, sessions: true, metrics: true },
-        logs: { enabled: true, maxEntries: 500, defaultLevel: 'info' },
       },
       telemetry: {
         enabled: false,
@@ -284,7 +283,7 @@ describe('config file -> runtime config mapping', () => {
       const { config, cleanup } = await resolve({
         version: 5,
         gates: { enabled: false, harnessCovers: ['security'] },
-        resources: { registerWithMcp: true, logs: { maxEntries: 50 } },
+        resources: { registerWithMcp: true, observability: { metrics: false } },
         logging: { directory: '/var/log/cpm', level: 'debug' },
       });
 
@@ -294,7 +293,7 @@ describe('config file -> runtime config mapping', () => {
       });
       expect(config.resources).toMatchObject({
         registerWithMcp: true,
-        logs: { maxEntries: 50 },
+        observability: { metrics: false },
       });
       expect(config.logging).toEqual({ directory: '/var/log/cpm', level: 'debug' });
 

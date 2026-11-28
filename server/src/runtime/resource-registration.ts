@@ -103,7 +103,6 @@ export function registerMcpResources(target: McpServer, deps: ResourceRegistrati
       gates: resourcesConfig.gates,
       frameworks: resourcesConfig.frameworks,
       observability: resourcesConfig.observability,
-      logs: resourcesConfig.logs,
     },
   });
 }
