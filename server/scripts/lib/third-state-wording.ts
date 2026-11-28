@@ -1,16 +1,21 @@
-// @lifecycle canonical - Finds wording that describes a spelling as old but still accepted.
+// @lifecycle canonical - Finds wording that describes a spelling as old but still accepted, or promises a change.
 /**
  * Check 6 of `validate:retirements`: the product has two states for a spelling, accepted or
  * refused. This finds the wording of the third one ("still works", "legacy", "deprecated") in
- * the text a user reads and in the strings the product shows.
+ * the text a user reads and in the strings the product shows. It also finds wording that
+ * promises a change ("in the next release", "will be removed"): a doc describes what the product
+ * does today, and a planned change lives in a plan.
  *
- * Two scopes:
- *   - user-facing text: the set `user-facing-scope.ts` defines, read line by line.
+ * Three scopes, and which phrases read each:
+ *   - user-facing text: the set `user-facing-scope.ts` defines, read line by line. Every phrase.
  *   - strings in code: string and template literals under `server/src` and `cli/src`, read from
  *     the TypeScript syntax tree, and string constants in `hooks/**\/*.py`, read by Python's
  *     `ast` module. Comments, docstrings, identifiers, import specifiers, property names and
  *     literal types are not strings a user is shown, so they are not read. Test files are not
- *     read.
+ *     read. Third-state phrases only.
+ *   - architecture docs (`docs/architecture/**`), contributor text outside the user-facing set.
+ *     Promise phrases only: those pages name old rows and old schemas on purpose, but they
+ *     describe the system as built and a promise there decays the same way.
  *
  * The phrases and the exemptions are data (`scripts/retirement-wording.json`). An exemption names
  * the phrase, the files and the exact number of matching lines per file; a count that differs
@@ -27,11 +32,16 @@ import { trackedFilesUnder } from './tracked-scope.js';
 
 import type { UserFacingLine } from './user-facing-scope.js';
 
-/** One phrase of the third state, with the line that says what it catches. */
+/** What a phrase describes, which decides the scopes it reads and the message it fails with. */
+export type WordingKind = 'third-state' | 'promise';
+
+/** One phrase, with the line that says what it catches. */
 export interface WordingPhrase {
   readonly id: string;
   readonly pattern: string;
   readonly catches: string;
+  /** Absent means `third-state`. */
+  readonly kind?: WordingKind;
 }
 
 /** Lines a still-accepted form (or a word naming something outside the product) may keep. */
@@ -62,6 +72,14 @@ export interface WordingHit {
   readonly line: number;
   readonly phrase: string;
   readonly matched: string;
+  readonly kind: WordingKind;
+}
+
+/** The text check 6 reads, one entry per scope. */
+export interface WordingScopes {
+  readonly texts: readonly WordingSource[];
+  readonly codeStrings: readonly WordingSource[];
+  readonly architecture: readonly WordingSource[];
 }
 
 export interface WordingFinding {
@@ -77,6 +95,9 @@ const CODE_ROOTS = ['server/src', 'cli/src', 'hooks'] as const;
 const TWO_STATES =
   'The product has two states for a spelling, accepted or refused; describe the current form, or retire the spelling through the ledger (CONTRIBUTING.md, Retiring a Spelling)';
 
+const DESCRIBE_TODAY =
+  'Describe what the product does today; a planned change lives in a plan, not in a doc';
+
 export function loadWordingRules(repoRoot: string): WordingRules {
   return JSON.parse(readFileSync(path.join(repoRoot, WORDING_FILE), 'utf8')) as WordingRules;
 }
@@ -88,16 +109,17 @@ export function findWordingHits(
 ): WordingHit[] {
   const compiled = phrases.map((phrase) => ({
     id: phrase.id,
+    kind: phrase.kind ?? 'third-state',
     re: new RegExp(phrase.pattern, 'i'),
   }));
   const hits = new Map<string, WordingHit>();
   for (const { file, lines } of sources) {
     for (const { line, text } of lines) {
-      for (const { id, re } of compiled) {
+      for (const { id, kind, re } of compiled) {
         const match = re.exec(text);
         const key = `${file}\u0000${line}\u0000${id}`;
         if (match !== null && !hits.has(key)) {
-          hits.set(key, { file, line, phrase: id, matched: match[0] });
+          hits.set(key, { file, line, phrase: id, matched: match[0], kind });
         }
       }
     }
@@ -105,8 +127,24 @@ export function findWordingHits(
   return [...hits.values()];
 }
 
+/** Every phrase match over the scopes each kind reads (see the module header). */
+export function findScopedWordingHits(
+  scopes: WordingScopes,
+  phrases: readonly WordingPhrase[]
+): WordingHit[] {
+  const promises = phrases.filter((phrase) => phrase.kind === 'promise');
+  const thirdState = phrases.filter((phrase) => phrase.kind !== 'promise');
+  return [
+    ...findWordingHits([...scopes.texts, ...scopes.codeStrings], thirdState),
+    ...findWordingHits([...scopes.texts, ...scopes.architecture], promises),
+  ];
+}
+
 function hitMessage(hit: WordingHit): string {
-  return `${hit.file}:${hit.line}: "${hit.matched}" (${hit.phrase}) describes a form as old but still accepted. ${TWO_STATES}.`;
+  const at = `${hit.file}:${hit.line}: "${hit.matched}" (${hit.phrase})`;
+  return hit.kind === 'promise'
+    ? `${at} promises a change instead of describing the product. ${DESCRIBE_TODAY}.`
+    : `${at} describes a form as old but still accepted. ${TWO_STATES}.`;
 }
 
 function countsBySite(hits: readonly WordingHit[]): Map<string, WordingHit[]> {

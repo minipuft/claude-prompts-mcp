@@ -24,7 +24,7 @@ Requires an OTLP-compatible collector (e.g., [OpenTelemetry Collector](https://o
 | Key                                         | Type                              | Default                 | Description                                                               |
 | ------------------------------------------- | --------------------------------- | ----------------------- | ------------------------------------------------------------------------- |
 | `telemetry.enabled`                         | boolean                           | `false`                 | Master switch. No SDK initialized when false.                             |
-| `telemetry.mode`                            | `"off"` \| `"traces"` \| `"full"` | `"off"`                 | `traces` = spans only. `full` = spans + metrics (future).                 |
+| `telemetry.mode`                            | `"off"` \| `"traces"` \| `"full"` | `"off"`                 | `traces` and `full` both export spans only; no metrics are exported.      |
 | `telemetry.exporterEndpoint`                | string                            | `http://localhost:4318` | OTLP HTTP endpoint URL.                                                   |
 | `telemetry.samplingRate`                    | number                            | `1.0`                   | Head sampling rate (0.0-1.0). Use collector tail sampling for production. |
 | `telemetry.attributePolicy.businessContext` | boolean                           | `true`                  | Include safe business attributes (prompt ID, execution mode, etc.).       |

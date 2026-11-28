@@ -251,10 +251,10 @@ Four-phase startup:
 | STDIO           | Line-based JSON                | Claude Desktop, Claude Code | Active |
 | Streamable HTTP | HTTP POST/GET with SSE streams | Web dashboards, remote APIs | Active |
 
-The `SSE streams` above are `text/event-stream` framing _within_ Streamable HTTP. The separate
-**HTTP+SSE transport** was removed in the SDK v2 upgrade — the TypeScript SDK no longer ships
-`SSEServerTransport`. `--transport=sse` fails with a message naming `streamable-http` rather than
-falling back to another transport.
+The `SSE streams` above are `text/event-stream` framing _within_ Streamable HTTP. There is no separate
+**HTTP+SSE transport**: the TypeScript SDK ships no `SSEServerTransport`, and `--transport` accepts
+`stdio`, `streamable-http` or `both`. The value `sse` is refused at startup, naming the transport
+to use instead; any other unrecognised value logs an error and starts on STDIO.
 
 **Streamable HTTP** (`--transport=streamable-http`):
 
@@ -799,10 +799,7 @@ MCP notification sent to clients
 | Script tools | the prompts folder (prompt-local `tools/` folders) plus the workspace scripts folder (`getScriptsDirectory()`)                              | `buildScriptAuxiliaryReloadConfig()` auxiliary reload     |
 | Change log   | `trackedResourceRoots()` — primary prompts and gates dirs plus every overlay candidate, **not** the bundled tree                            | `buildResourceChangeTrackerAuxiliaryReloadConfig()`       |
 
-The prompts row watches each prompts root itself. Until 2026-09-17 the primary was watched through
-its PARENT, `<workspace>/resources`, because `startHotReload` still reduced its argument with `path.dirname` after callers had switched
-from a config-file path to the directory. Every other type keeps its own watcher, so nothing was
-observed only through that parent.
+The prompts row watches each prompts root itself, and every other type keeps its own watcher.
 
 An overlay counts as a root whether or not it exists yet (`getOverlayResourceCandidates()`): the
 loaders read an absent root as empty, and the watcher arms on it once it appears. That list is

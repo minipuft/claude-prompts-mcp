@@ -184,13 +184,18 @@ gateConfiguration:
 
 #### Execution status
 
-Inline definitions are **displayed and analyzed only by default in this release** — they are not
-registered as gates unless an operator opts in. Setting
-[`gates.executeInlineGateDefinitions: true`](gate-configuration.md#executing-a-prompts-inline-gate-definitions)
-executes them now; the default flips in the next release, per the warn-then-arm migration in
-[ADR 0001 (d)](../adr/0001-gate-resolution-precedence.md). The warnings above are the point of the
-interval: they let an operator see, one release ahead, which prompts in their workspace would newly
-arm a gate.
+Whether inline definitions run is decided by one config key,
+[`gates.executeInlineGateDefinitions`](gate-configuration.md#executing-a-prompts-inline-gate-definitions),
+which defaults to `false`:
+
+- **`false` (the default):** definitions are loaded, validated and listed by `resource_manager`
+  `inspect`, but none is registered as a gate and no step is reviewed against one. Nothing is
+  logged for a well-formed definition.
+- **`true`:** every definition that passes validation is registered and reviewed as described
+  below.
+
+The `Dropped inline gate definition` warning described above is logged under either value. It
+names a definition the loader discarded, which never runs whatever the key says.
 
 When they do execute:
 

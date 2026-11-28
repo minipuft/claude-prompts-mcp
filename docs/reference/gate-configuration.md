@@ -179,7 +179,7 @@ actual captured target; a bare PASS or tool sibling does not satisfy this requir
 Capture the step output before submitting the report. Stale or misaddressed bindings are refused.
 
 A target `{kind: step_output}` uses the server capture. `{kind: artifact, id: opaque-reference}`
-is a valid declaration, but artifact capture is currently unavailable at runtime. The id does
+is a valid declaration, but the runtime captures no artifacts. The id does
 not resolve a filesystem path. Unknown target kinds and malformed domains remain refused.
 Report acceptance checks the declared contract and evidence; it does not establish model
 accuracy, human approval, or execution by an external reviewer.
@@ -257,12 +257,13 @@ than executed, unless one more `gates` config key is turned on:
 | ------------------------------------ | --------- | ------- | --------------------------------------------------------------------------- |
 | `gates.executeInlineGateDefinitions` | `boolean` | `false` | Execute a prompt's inline gate definitions instead of only displaying them. |
 
-**Why it ships off.** A definition an author wrote and forgot would newly arm a gate the moment
-this flips, and a workspace overlaid via `MCP_WORKSPACE` cannot be inventoried from the server. So
-this release warns instead: watch the server log for `Dropped inline gate definition` and check
-any prompt it names. Set the key to `true` to opt in early and verify the behavior before the next
-release makes `true` the default, per
-[ADR 0001 (d)](../adr/0001-gate-resolution-precedence.md).
+With the key `false`, a prompt's definitions are loaded, validated and listed by
+`resource_manager` `inspect`, and none of them gates a run. With it `true`, every definition that
+passes validation is registered as a gate and reviewed. Before turning it on,
+check the prompts in your workspace for inline definitions you did not mean to enforce: the server
+logs nothing about a well-formed definition while the key is `false`. The
+`Dropped inline gate definition` warning is logged under either value and names a malformed
+definition that never runs.
 
 An inline definition is scoped to one prompt and accepts fewer fields than the standalone
 `gate.yaml` schema this page documents — see

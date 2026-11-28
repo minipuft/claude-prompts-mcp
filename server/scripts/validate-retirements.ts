@@ -29,8 +29,10 @@
  *      `generate-retirements-doc.ts` renders from the ledger, so a hand edit, a stale file or an
  *      entry present in one and absent from the other fails naming the command to run.
  *   6. no user-facing line and no string the product shows describes a form as old but still
- *      accepted ("still works", "legacy", "deprecated"): `scripts/lib/third-state-wording.ts`,
- *      with its phrases and exemptions in `scripts/retirement-wording.json`.
+ *      accepted ("still works", "legacy", "deprecated"), and no user-facing or architecture doc
+ *      promises a change ("in the next release", "will be removed"):
+ *      `scripts/lib/third-state-wording.ts`, with its phrases and exemptions in
+ *      `scripts/retirement-wording.json`.
  *
  * `--list` prints the log instead: each entry with its dates and its sites as `file:line`.
  *
@@ -58,13 +60,14 @@ import {
 } from './lib/retirement-projection.js';
 import {
   checkWording,
-  findWordingHits,
+  findScopedWordingHits,
   loadWordingRules,
   scanCodeStrings,
   type WordingRules,
 } from './lib/third-state-wording.js';
 import { trackedFilesUnder } from './lib/tracked-scope.js';
 import {
+  listArchitectureFiles,
   listUserFacingFiles,
   readUserFacingLines,
   type UserFacingLine,
@@ -129,6 +132,8 @@ export interface RetirementCheckInput {
   readonly texts: readonly ScannedText[];
   /** The displayable strings of the code scope, for check 6. */
   readonly codeStrings: readonly ScannedText[];
+  /** The architecture pages, read by check 6's promise phrases only; absent reads none. */
+  readonly architectureTexts?: readonly ScannedText[];
   /** Check 6's phrases and exemptions. */
   readonly wording: WordingRules;
   /** What the generator renders from the ledger, and the page as it is on disk (null: absent). */
@@ -419,13 +424,17 @@ export function checkRuntimeProjection(
   return checkGeneratedFile(PROJECTION_FILE, expected, onDisk);
 }
 
-/** Check 6: third-state wording in user-facing text and in code strings, minus exemptions. */
+/**
+ * Check 6: third-state wording in user-facing text and in code strings, and promise wording in
+ * user-facing text and the architecture pages, minus exemptions.
+ */
 export function checkThirdStateWording(
   texts: readonly ScannedText[],
   codeStrings: readonly ScannedText[],
-  wording: WordingRules
+  wording: WordingRules,
+  architecture: readonly ScannedText[] = []
 ): RetirementFinding[] {
-  const hits = findWordingHits([...texts, ...codeStrings], wording.phrases);
+  const hits = findScopedWordingHits({ texts, codeStrings, architecture }, wording.phrases);
   return checkWording(hits, wording.exemptions).map((finding) => ({ check: 6, ...finding }));
 }
 
@@ -448,7 +457,12 @@ export function runRetirementChecks(input: RetirementCheckInput): RetirementChec
       ...checkUpgradingPage(input.expectedPage, input.upgradingPage),
       ...checkRuntimeProjection(input.expectedProjection, input.projection),
       ...expiry.failures.map(asFinding),
-      ...checkThirdStateWording(input.texts, input.codeStrings, input.wording),
+      ...checkThirdStateWording(
+        input.texts,
+        input.codeStrings,
+        input.wording,
+        input.architectureTexts
+      ),
     ],
     warnings: expiry.warnings.map(asFinding),
   };
@@ -515,6 +529,14 @@ export function scanUserFacingText(repoRoot = REPO_ROOT): ScannedText[] {
   }));
 }
 
+/** Every architecture page, for check 6's promise phrases. */
+export function scanArchitectureText(repoRoot = REPO_ROOT): ScannedText[] {
+  return listArchitectureFiles(repoRoot).map((entry) => ({
+    file: entry.file,
+    lines: readUserFacingLines(repoRoot, entry),
+  }));
+}
+
 function readPackageVersion(): string {
   const manifest = JSON.parse(readFileSync(path.join(SERVER_ROOT, 'package.json'), 'utf8')) as {
     version: string;
@@ -572,6 +594,14 @@ function main(): void {
     process.exitCode = 1;
     return;
   }
+  const architectureTexts = scanArchitectureText();
+  if (architectureTexts.length === 0) {
+    console.error(
+      `❌ ${GATE}: docs/architecture/ resolved to no tracked page; the scan is broken.`
+    );
+    process.exitCode = 1;
+    return;
+  }
   const codeStrings = scanCodeStrings(REPO_ROOT);
   if (!codeStrings.some((source) => source.lines.length > 0)) {
     console.error(`❌ ${GATE}: the code scope held no string literal; the scan is broken.`);
@@ -584,6 +614,7 @@ function main(): void {
     declaredFiles,
     texts,
     codeStrings,
+    architectureTexts,
     wording: loadWordingRules(REPO_ROOT),
     expectedPage: renderUpgradingPage(entries),
     upgradingPage: readRepoFile(UPGRADING_PAGE),
@@ -601,7 +632,7 @@ function main(): void {
   }
   const declared = Object.keys(declaredFiles).length;
   console.log(
-    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s) reading the projection and ${declared} declared file(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page and the runtime projection current, ${warnings.length} past its date; ${codeStrings.length} code file(s) and the user-facing text free of third-state wording outside its exemptions`
+    `✅ ${GATE}: ${entries.length} entries, each refused at a site and driven by a test; ${sites.length} site(s) reading the projection and ${declared} declared file(s), ${texts.length} user-facing file(s) free of a retired name, the upgrade page and the runtime projection current, ${warnings.length} past its date; ${codeStrings.length} code file(s) and the user-facing text free of third-state wording, and the user-facing text and ${architectureTexts.length} architecture page(s) free of promise wording, outside its exemptions`
   );
 }
 

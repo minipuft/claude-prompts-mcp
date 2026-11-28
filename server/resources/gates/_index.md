@@ -6,11 +6,9 @@
 
 For the full enforcement-mode taxonomy (`inline_guidance` / `framework_compliance` / `shell_verify` / `script_tool` / `semantic_evaluation`) and how each `pass_criteria.type` actually behaves at runtime, see [docs/guides/gates.md](../../../docs/guides/gates.md#enforcement-modes).
 
-> **Note:** Gate types `content_check` and `pattern_check` were renamed to `inline_guidance` — neither had a runtime enforcement path; both rendered guidance text only. Gates using the old names should migrate.
-
 **Tier** records authored requirements: `check` for tool criteria, `evaluation` for semantic-only criteria, otherwise `reminder`. Tools take tier precedence in mixed gates; **Components** retains both requirements. This static index proves no execution, report acceptance or model quality.
 
-**Activation** reads `opt-in` when a gate has no `activation` block at all: since claude-prompts-mcp #286, `isGateActiveForContext` never auto-attaches an undefined activation — the gate still applies when named explicitly (`gateConfiguration.include`, `inlineGateIds`). `always` marks a gate whose `activation` block carries no restricting rule and so auto-attaches to every context.
+**Activation** reads `opt-in` when a gate has no `activation` block at all: `isGateActiveForContext` never auto-attaches an undefined activation — the gate still applies when named explicitly (`gateConfiguration.include`, `inlineGateIds`). `always` marks a gate whose `activation` block carries no restricting rule and so auto-attaches to every context.
 
 ## Development
 
@@ -64,4 +62,4 @@ For the full enforcement-mode taxonomy (`inline_guidance` / `framework_complianc
 
 ---
 
-*Generated: 2026-10-28*
+*Generated: 2026-11-28*

@@ -518,10 +518,9 @@ declared type, fails the run with a message naming the tool and the fields.
 
 Declaring one is optional. Returning JSON is not: **a script tool must write a JSON value to
 stdout**, whether or not it declares a shape. Empty stdout, or text that does not parse as JSON,
-fails the run and names the tool — print diagnostics to stderr instead. Until this was enforced,
-unparseable stdout arrived as `{ "output": "<the text>" }` and was reported as success, so a
-script that printed a traceback, or a debug line before its payload, looked like a tool that had
-returned a value while every `{{script:id.field}}` rendered empty.
+fails the run and names the tool — print diagnostics to stderr instead. Accepting unparseable
+stdout would let a script that printed a traceback, or a debug line before its payload, look like a
+tool that had returned a value while every `{{script:id.field}}` rendered empty.
 
 ---
 
@@ -568,12 +567,11 @@ Script tool 'my_tool' emitted an auto_execute call that is refused.
 'enforcementMode' is not a parameter of resource_manager.  Did you mean 'enforcement_mode'?
 ```
 
-Before this, such a key was dropped and the mutation ran with a success reply — so a script that
-believed it was emitting `preview_action` but spelled it `previewAction` performed the real write.
-The same rule the MCP boundary applies
-([mcp-tools.md § Undeclared parameters](../reference/mcp-tools.md#undeclared-parameters)) now
-applies here, which is why a bundled tool never emits the camelCase spelling `enforcementMode`
-for `enforcement_mode`.
+Dropping the key instead would let a script that believed it was emitting `preview_action` but
+spelled it `previewAction` perform the real write. The same rule the MCP boundary applies
+([mcp-tools.md § Undeclared parameters](../reference/mcp-tools.md#undeclared-parameters)) applies
+here, which is why a bundled tool never emits the camelCase spelling `enforcementMode` for
+`enforcement_mode`.
 
 ### A refused auto-execute fails the run
 
@@ -592,8 +590,8 @@ A script's emitted parameters are also validated against the **same** `resource_
 MCP client's call is validated against, so a script cannot send `limit: "not-a-number"` — a shape no
 client could — and reach the router untyped.
 
-An accepted `auto_execute` is unaffected: it runs, `{{tool_<id>_result}}` holds its reply, and the
-prompt renders as before.
+An accepted `auto_execute` runs, `{{tool_<id>_result}}` holds its reply, and the prompt renders
+with it.
 
 ### Environment Variables
 

@@ -17,7 +17,6 @@ This is the map for the Claude Prompts MCP server. Canonical operational docs ar
 _I want to learn by doing._
 
 - **[Build Your First Prompt](tutorials/build-first-prompt.md)**: Create and run a hot-reloadable prompt.
-- _(Coming Soon)_: Create an Approval Chain.
 
 > [!TIP]
 > **New here?** Start with [Build Your First Prompt](tutorials/build-first-prompt.md) — you'll have a working prompt in under 5 minutes.

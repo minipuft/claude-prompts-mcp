@@ -277,9 +277,9 @@ chainSteps:
 ```
 
 **The declared VALUE is not read.** Each key receives the step's _whole_ output, so
-`{ findings: output, verdict: output }` publishes the same text twice under two names. The value
-slot is reserved for a future sub-content selector; no selector exists today, and nothing in the
-runtime inspects it. Write the key you want to read and treat the value as documentation.
+`{ findings: output, verdict: output }` publishes the same text twice under two names. Nothing in
+the runtime inspects the value. Write the key you want to read and treat the value as
+documentation.
 
 **Namespaced, not flat.** A named output is a chain-history value under an author-chosen name, so
 it is withheld exactly when the positional history surface is — see

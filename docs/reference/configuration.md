@@ -212,7 +212,7 @@ Full flag reference and subcommand details: [CLI Guide § config](../guides/cli.
 
 **Over MCP**, `system_control(action:"config", …)` serves reads only: `list`, `keys`, `get`, and
 `validate`. There is no `set`, `reset`, `restore`, `history` or `rollback` operation; a request
-naming one is refused by name, and the version history added in 5.0 is a `cpm` surface only. Change a setting with `cpm config set` instead. Full parameters and examples: [MCP Tools
+naming one is refused by name, and config version history is a `cpm` surface only. Change a setting with `cpm config set` instead. Full parameters and examples: [MCP Tools
 Reference § Config Operations](mcp-tools.md#config-operations).
 
 This is narrower than "configuration can't be written over MCP." Toggling gates or a framework
@@ -262,8 +262,8 @@ the same workspace. They read the same two variables in the same order the serve
 3. The packaged `server/` directory
 
 Within each candidate directory, `config.jsonc` is tried before `config.json`, and the first file
-that exists wins. See `hooks/README.md` for the hook-specific settings this covers (currently just
-`hooks.expandedOutput`).
+that exists wins. See `hooks/README.md` for the hook-specific setting this covers,
+`hooks.expandedOutput`.
 
 ## The Version Key
 

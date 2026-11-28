@@ -232,6 +232,9 @@ All docs live under `docs/` organized by [Diataxis](https://diataxis.fr/) intent
 
 - Update docs **in the same changeset** as code -- no deferred TODOs.
 - Verify references against `server/dist/**` for behavioral accuracy.
+- Describe what the product does today. A planned change, a default that is meant to change, or
+  anything else promised for the future is written in a plan under `plans/`, never in a doc;
+  `validate:retirements` fails that wording in user-facing and architecture docs.
 - Consult [Docs Index](docs/README.md) before creating new files.
 
 ### Retiring a Spelling
@@ -269,7 +272,9 @@ The gate fails a declared file that is not tracked or no longer holds its marker
 driver, a read of the projection naming no entry, a user-facing line matching a `docPattern`, and
 an upgrade page or projection that differs from what the ledger renders. It also fails wording
 that describes a form as old yet accepted, in user-facing text and in the strings `server/src`,
-`cli/src` and `hooks/` show; the phrases, and the few dated exemptions for forms not yet retired, are data in
+`cli/src` and `hooks/` show, and wording that promises a future change in user-facing and
+architecture docs. The phrases, and the few dated exemptions for words
+that name something other than a spelling of this product, are data in
 `server/scripts/retirement-wording.json`, and an exemption whose line is gone fails too. `npm run retirements:list` prints each entry with its dates and its refusal
 sites.
 
