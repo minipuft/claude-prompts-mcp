@@ -126,7 +126,6 @@ export interface RequestIdentityResolverOptions {
   allowPerRequestOverride: boolean;
   launchDefaults?: IdentityLaunchDefaults;
   transportMode?: TransportMode;
-  requestClientProfileHint?: RequestClientProfileHint;
 }
 
 interface IdentityClaimMatch {
@@ -172,13 +171,6 @@ interface IdentityContextOptions {
 type ClientProfileClaimSource = 'token' | 'header';
 
 interface RawClientProfile {
-  clientFamily?: string;
-  clientId?: string;
-  clientVersion?: string;
-  delegationProfile?: string;
-}
-
-export interface RequestClientProfileHint {
   clientFamily?: string;
   clientId?: string;
   clientVersion?: string;
@@ -554,8 +546,7 @@ function resolveClientInfoProfile(extra?: McpRequestExtra): RawClientProfile | u
 
 function resolveClientProfile(
   extra: McpRequestExtra | undefined,
-  launchDefaults: IdentityLaunchDefaults,
-  requestHint?: RequestClientProfileHint
+  launchDefaults: IdentityLaunchDefaults
 ): ResolvedClientProfile {
   const headers = getHeaderMap(extra);
   const trusted = resolveTrustedClientProfile(extra, headers);
@@ -571,7 +562,6 @@ function resolveClientProfile(
       },
     },
     { source: 'trusted-request', profile: trusted.profile },
-    { source: 'request-hint', profile: requestHint },
     { source: 'client-info', profile: resolveClientInfoProfile(extra) },
   ];
 
@@ -762,11 +752,7 @@ export function resolveRequestIdentityContext(
   const launchDefaults = normalizeLaunchDefaults(options.launchDefaults);
   const launchOrganizationId = launchDefaults.organizationId ?? launchDefaults.workspaceId;
   const launchWorkspaceId = launchDefaults.workspaceId ?? launchDefaults.organizationId;
-  const resolvedClientProfile = resolveClientProfile(
-    extra,
-    launchDefaults,
-    options.requestClientProfileHint
-  );
+  const resolvedClientProfile = resolveClientProfile(extra, launchDefaults);
 
   const claimsIdentity = resolveRequestClaimsIdentity(extra);
 
@@ -824,13 +810,7 @@ export function resolveRequestIdentityContext(
     precedence,
     clientProfile: resolvedClientProfile.profile,
     clientProfileSource: resolvedClientProfile.source,
-    clientPrecedence: [
-      'launch-default',
-      'trusted-request',
-      'request-hint',
-      'client-info',
-      'default',
-    ],
+    clientPrecedence: ['launch-default', 'trusted-request', 'client-info', 'default'],
     overrideAttempted:
       selectedOrganization.overrideAttempted || selectedWorkspace.overrideAttempted,
     usedDefaultFallback,
@@ -921,7 +901,6 @@ export function toIdentityContext(
       clientPrecedence: options.clientPrecedence ?? [
         'launch-default',
         'trusted-request',
-        'request-hint',
         'client-info',
         'default',
       ],

@@ -482,14 +482,6 @@
         },
         "type": "array"
       },
-      "options": {
-        "additionalProperties": {},
-        "description": "<present>",
-        "propertyNames": {
-          "type": "string"
-        },
-        "type": "object"
-      },
       "remainder": {
         "additionalProperties": false,
         "description": "<present>",
@@ -1120,22 +1112,6 @@
             "validation": {
               "additionalProperties": false,
               "properties": {
-                "allowedValues": {
-                  "items": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "boolean"
-                      }
-                    ]
-                  },
-                  "type": "array"
-                },
                 "maxLength": {
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991,
@@ -1188,22 +1164,6 @@
             "validation": {
               "additionalProperties": false,
               "properties": {
-                "allowedValues": {
-                  "items": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "boolean"
-                      }
-                    ]
-                  },
-                  "type": "array"
-                },
                 "maxLength": {
                   "exclusiveMinimum": 0,
                   "maximum": 9007199254740991,

@@ -239,8 +239,8 @@ character, not a literal backslash**:
 
 This applies only to values typed into `command`. Values passed through `inputs` bypass the
 command grammar and retain their original JSON types, so paths, regular expressions, nested
-objects, and arrays arrive exactly as sent. `options` carries execution hints, not prompt
-arguments. Resolution precedence is: explicit inline argument → `inputs` → prompt default. On a
+objects, and arrays arrive exactly as sent. Resolution precedence is: explicit inline argument →
+`inputs` → prompt default. On a
 `-->` chain command `inputs` apply to the first segment's prompt; later segments take their
 arguments from the command text and the previous step's output.
 
@@ -356,7 +356,6 @@ prompt_engine(command:"%judge analysis_report")
 | `gates`         | array   | Quality gates (IDs, quick checks, or full definitions)                                                                                                                                                                                                                                         |
 | `force_restart` | boolean | Restart chain from step 1                                                                                                                                                                                                                                                                      |
 | `inputs`        | object  | Typed prompt arguments. Nested objects and arrays stay structured; explicit inline arguments win on key conflicts.                                                                                                                                                                             |
-| `options`       | object  | Execution hints. Supports `client_profile` (`clientFamily`, `clientId`, `clientVersion`, `delegationProfile`) when transport metadata is unavailable.                                                                                                                                          |
 | `observations`  | array   | Typed unknowns discovered/resolved this step, feeding the per-run unknowns ledger. See [Unknowns Ledger](#unknowns-ledger).                                                                                                                                                                    |
 | `workflow`      | object  | A structured multi-step run submitted instead of a command string. Mutually exclusive with `command` and `chain_id`. See [Workflow Submission](#workflow-submission).                                                                                                                          |
 | `remainder`     | object  | Rewrite the rest of a running chain after a blocking unknown invalidated its shape. `{mode:'replace'\|'append', nodes:[…], edges?:[…]}`, requires `chain_id`. See [Blocking-unknown interrupt](#blocking-unknown-interrupt).                                                                   |
@@ -608,8 +607,8 @@ chainSteps:
 `withhold` and `expose` each take zero or more items from the fixed vocabulary
 `previous_step_output | chain_history | unknowns_ledger`. An unrecognized item fails the prompt's
 load, naming the allowed values. A step's `withhold` affects every LATER step's default render,
-never its own; a later step's `expose` overrides that withhold for itself only. No `visibility`
-declared anywhere in a chain renders byte-identically to a build without this feature.
+never its own; a later step's `expose` overrides that withhold for itself only. A chain that
+declares no `visibility` anywhere withholds nothing.
 
 A delegated (`==>`) step's envelope excludes withheld items and reports their names on one
 manifest line so the sub-agent knows what it does not have. See [Visibility
@@ -1120,18 +1119,15 @@ the gate system is disabled, so nothing reads a gate parameter. Enable it with
 
 #### Why this is a security property
 
-Until this refusal, an undeclared key was accepted, read by nobody, and the call answered
-**success**. Measured over both transports before the fix: `prompt_engine {command, force_restrt}`
-returned a normal prompt list, and `system_control {action:"status", previw:true}` returned a normal
-status overview — both `isError: false`.
+Without this refusal, an undeclared key would be accepted, read by nobody, and the call would
+answer **success**: `prompt_engine {command, force_restrt}` would return a normal prompt list, and
+`system_control {action:"status", previw:true}` a normal status overview, both `isError: false`.
 
 The cost is not a dropped convenience flag. A caller — or a model following a prompt-injected
-instruction — that sends a **safety** flag under a slightly wrong name got a success reply while the
-server did the unguarded thing: a `preview` / `confirm` / `persist` typo ran the guarded action
-unguarded.
-This repository has already paid that once, through exactly this mechanism: a `skills_sync` preview
-wrote 33 real files because the registered schema dropped the undeclared flag. Refusing by name
-turns the whole class into a loud error at the boundary.
+instruction — that sends a **safety** flag under a slightly wrong name would get a success reply
+while the server did the unguarded thing: a `preview` / `confirm` / `persist` typo would run the
+guarded action unguarded. Refusing by name turns the whole class into a loud error at the
+boundary.
 
 #### Scope
 
@@ -1406,22 +1402,19 @@ a model hint for the judge, and `strict` asks for failures first (under `judge` 
 `true`). The block is written whole, so a supplied block replaces the gate's existing one rather
 than merging into it. Omitted on update, the existing block is kept. `{"mode": "self"}` returns a
 gate to self-review, but it is not the same as removing the block: a gate that declares no block
-follows `gates.evaluation.defaultMode`, and there is no parameter that removes the block yet. A key
+follows `gates.evaluation.defaultMode`, and no parameter removes the block. A key
 the block does not declare is refused by path with the nearest declared key
 (`'evaluation.stirct' is not a declared key — did you mean 'strict'?`).
 
 Every gate parameter is named for the `gate.yaml` key it writes. `type` and `gate_type` are two
 different keys and each has its own parameter: `type` is the validation/guidance behaviour,
-`gate_type` is the classification the loader filters framework gates on. **Breaking change
-(P4.10):** the parameter now called `type` was published as `gate_type` until this release, where
-it took the other key's name and left that key unauthorable. Sending the validation/guidance value
-under `gate_type` is now rejected by the schema — send it under `type`.
+`gate_type` is the classification the loader filters framework gates on. A validation/guidance
+value sent under `gate_type` is refused by the schema — send it under `type`.
 
 Omitting `gate_type` on an update leaves the gate's current value alone, the same way `severity`
-and `enforcement_mode` do. Until this release an update supplying ONLY `gate_type` reported
-`✅ Gate 'x' updated successfully` over a byte-identical `gate.yaml`: the key was absent from the
-set the writer narrows a write by, so no `gate.yaml` write was planned. That set is now derived
-from the writer's own key partition, so every settable gate key is covered by construction.
+and `enforcement_mode` do. An update supplying only `gate_type` writes that key to `gate.yaml`: the
+set of keys a write is narrowed by is derived from the writer's own key partition, so every
+settable gate key is in it.
 
 **Category Parameters:**
 
@@ -1702,8 +1695,8 @@ passed.
 
 The gate id is the one the review advertised, resolved from the submitted `[n]` position at the
 parse boundary; an index naming no advertised gate is dropped rather than guessed, so it appears
-nowhere. A record whose review carried no `per_gate` list renders exactly as before — including
-every record written before this was recorded, so an existing ledger is unchanged.
+nowhere. A record whose review carried no `per_gate` list renders its summary line with no gate
+lines under it.
 
 `system_control(action:"analytics")` reads the same rows: **Gate Validations** is the number of
 ledger records carrying at least one verdict, and a **Per-Gate Outcomes** list breaks it into
@@ -1766,7 +1759,7 @@ claim from any other scope is answered as an unknown token.
 
 Abort applies to active runs, blocking-unknown pauses, ordinary reviews and detached holds.
 Send only `chain_id` and `gate_action:"abort"`: no node, trailer, report, retry exhaustion or
-command is required. The existing scoped cancellation transition persists `cancelled`, retaining
+command is required. The scoped cancellation transition persists `cancelled`, retaining
 state and artifacts across reloads; later progression is refused. Clear removes them during cleanup.
 A run paused for conversation is aborted the same way; a clear refuses a paused run until it is
 aborted.
@@ -1784,10 +1777,8 @@ outcome is the signal:
 
 `chainId` is `null` when the call named none; `runId` is present when the run was found. No token.
 
-The public `cancel` property is removed. Calls carrying `cancel:true`, `cancel:false`, or a mixed
-cancel/abort request are refused by the existing undeclared-parameter check before execution,
-without changing the run. There is no alias. Internal cancellation and persisted `cancelled`
-remain part of the lifecycle.
+Abort is the only call that cancels a run. A key `prompt_engine` does not declare is refused
+before execution, without changing the run ([Undeclared parameters](#undeclared-parameters)).
 
 ### Resource Change Tracking
 
@@ -2375,15 +2366,13 @@ action, so there is nothing to confirm.
 the reply says how many rows it removed. Deleting a chain takes its steps' history too, since a step
 is recorded under the composite id `chain/step`. `cpm delete` does the same. History left behind
 would be unreachable, because rollback resolves the resource first, and would be inherited by
-whatever is created under that id next. One caveat remains:
-rows `cpm` wrote are keyed by the tenant id the CLI resolved, which is not yet always the one the
-server resolves for the same workspace, so an MCP delete purges what the MCP surface wrote.
+whatever is created under that id next. One caveat: rows `cpm` wrote are keyed by the tenant id
+the CLI resolved, which is not always the one the server resolves for the same workspace, so an MCP
+delete purges what the MCP surface wrote.
 
-<!-- preview-vocabulary: migration-note -->
-
-That is the whole reason it is an action rather than the `dry_run` boolean it replaced: a flag sat on
-`delete`, and the confirmation guard reads the action, so previewing a deletion demanded that the
-deletion be confirmed first. `dry_run` is removed — see the CHANGELOG's breaking-changes entry.
+Preview is an action rather than a flag on `delete` because the confirmation guard reads the
+action: a flag on `delete` would make previewing a deletion demand that the deletion be confirmed
+first.
 
 ### What a rollback restores
 

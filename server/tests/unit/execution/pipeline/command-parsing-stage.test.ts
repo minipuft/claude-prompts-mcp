@@ -97,7 +97,7 @@ describe('CommandParsingStage', () => {
     );
   });
 
-  test('merges structured inputs without coercion using inline > inputs > options > defaults', async () => {
+  test('merges structured inputs without coercion using inline > inputs > defaults', async () => {
     const parseResult = {
       promptId: 'art_prompt',
       rawArgs: 'mode="inline"',
@@ -142,10 +142,8 @@ describe('CommandParsingStage', () => {
     };
     const context = new PromptRequestContext({
       command: '>>art_prompt mode="inline"',
-      options: { mode: 'legacy', note: 'legacy' },
       inputs,
     } as never);
-    context.state.normalization.requestOptions = { mode: 'legacy', note: 'legacy' };
     context.state.normalization.requestInputs = inputs;
 
     const stage = new CommandParsingStage(

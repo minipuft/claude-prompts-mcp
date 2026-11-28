@@ -165,11 +165,10 @@ describe('RequestNormalizationStage', () => {
   });
 
   describe('typed argument transport', () => {
-    test('keeps options and inputs out of command-string grammar', async () => {
+    test('keeps inputs out of command-string grammar', async () => {
       const stage = new RequestNormalizationStage(null, null, createLogger());
       const context = new PromptRequestContext({
         command: '>>demo mode:"inline"',
-        options: { theme: "artist's note", mode: 'legacy' },
         inputs: {
           palette: ['ochre', 'ultramarine'],
           composition: { weights: { edge: 0.7 }, references: [{ id: 'r1' }] },
@@ -180,10 +179,6 @@ describe('RequestNormalizationStage', () => {
       await stage.execute(context);
 
       expect(context.state.normalization.normalizedCommand).toBe('>>demo mode:"inline"');
-      expect(context.state.normalization.requestOptions).toEqual({
-        theme: "artist's note",
-        mode: 'legacy',
-      });
       expect(context.state.normalization.requestInputs).toEqual({
         palette: ['ochre', 'ultramarine'],
         composition: { weights: { edge: 0.7 }, references: [{ id: 'r1' }] },

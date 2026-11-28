@@ -1015,7 +1015,6 @@ export class McpToolRouter {
               // rendering the prompt instead of minting. Same allowlist, same lesson.
               ...(args.handoff !== undefined ? { handoff: args.handoff } : {}),
               ...(args.claim_token?.trim() ? { claim_token: args.claim_token.trim() } : {}),
-              ...(args.options != null ? { options: args.options } : {}),
               ...(args.inputs != null ? { inputs: args.inputs } : {}),
               ...(args.observations != null ? { observations: args.observations } : {}),
               // Fifth instance (2026-08-30): `remainder`. Entered here in the SAME tier that

@@ -163,7 +163,7 @@ were. It records `{kind:"conversation", nodeId, pausedAt}` beside them, plus a r
 
 - **Control calls only.** A `pause` or `resume` sent with `user_response`, `gate_verdict`,
   `remainder`, `observations`, `command`, `workflow`, `force_restart`, `handoff`, `claim_token`,
-  `inputs`, `options` or `gates` is refused before anything changes. Presence decides, so an empty
+  `inputs` or `gates` is refused before anything changes. Presence decides, so an empty
   string or `false` still counts as sent.
 - **While paused**, every other workflow call on the run is refused with the resume-or-abort
   instruction, and nothing changes. Reads are allowed: `system_control` session list and inspect,
@@ -211,7 +211,7 @@ and the `conversation-pause-*` cases in
 Each step in a chain has a stable node id, not just a position. Internally, steps are addressed by
 this id — integer step numbers (`current_step`/`total_steps` in the hook dict, `chain_sessions`
 state-blob keys, the `v_execution_status` view) are a **derived projection** computed from the node
-id at those three boundaries, kept byte-identical to what position-only chains produced before.
+id at those three boundaries.
 
 - **YAML chains**: a step may declare `id:` explicitly (kebab-case, unique within the chain). When
   omitted, the id defaults to a slug of `stepName`.
@@ -224,9 +224,8 @@ Gates may target a step by `target_step_id` in addition to `target_step_number` 
 > [!NOTE]
 > **`step{N}_result` template variables are 1-indexed by ordinal, not by step number.** A step's
 > result renders as `step{ordinal+1}_result` — the first step's output is `step2_result`, not
-> `step1_result`. `{{step1_result}}` never resolves for a real chain. This is existing,
-> unchanged arithmetic (`buildChainVariables`), not something P3 introduced or fixed; it is
-> documented here because it is easy to assume otherwise. Prefer `{{step_results}}` (the full map)
+> `step1_result`. `{{step1_result}}` never resolves for a real chain. The numbering comes from
+> `buildChainVariables`, and it is easy to assume otherwise. Prefer `{{step_results}}` (the full map)
 > or `steps.{StepName}.result` in `inputMapping` — both are unaffected.
 
 ---
@@ -280,7 +279,6 @@ retry exhaustion or command. It works for active runs, blocking-unknown pauses, 
 and detached holds. The scoped transition persists `runStatus:"cancelled"` while retaining state
 and artifacts. Repeated abort is idempotent; completed, failed, missing or out-of-scope runs return
 non-applied results without mutation. Later progression is blocked, including after reload.
-The public `cancel` property is removed; the existing undeclared-parameter check refuses retired-key requests.
 
 For `loop:true` checks, abort also releases stored active verification bound to the run's
 internal identity; foreign or unbound rows are retained. Incomplete cleanup returns
@@ -356,8 +354,8 @@ parameter shape and validation rules.
 
 A blocking unknown or an irrelevant resolution can change the run's remaining node list — the
 server decides, deterministically, whether and how. The model never edits the graph itself; it
-only ever declares typed observations (D2), and the effect on the run is advisory by construction
-(D6): a mutation is a reaction to what was declared, never a prediction of what should happen next.
+only ever declares typed observations, and the effect on the run is advisory by construction: a
+mutation is a reaction to what was declared, never a prediction of what should happen next.
 
 **Flow**: observation (via `observations`) -> ledger entry (open/close) -> policy decision ->
 insert or skip -> rendering follows the mutated node list.
@@ -403,9 +401,8 @@ render or review. So does a gate a step's own prompt supplies: one its `gateConf
 names, or one its category activates. In `>>a --> >>b --> >>c` where `b`'s prompt includes
 `code-quality` and the other two do not, `code-quality` renders and is reviewed on `b` only, and a
 step whose own prompt also supplies it holds it on that step too. A registered gate the request
-names in `gates` with no step target and a framework gate keep reaching every step they reached
-before; a gate with `target_step_id`, `target_step_number` or `apply_to_steps` reaches the steps it
-names.
+names in `gates` with no step target and a framework gate reach every step; a gate with
+`target_step_id`, `target_step_number` or `apply_to_steps` reaches the steps it names.
 
 **A chain prompt's own gates are reviewed once, on its final step.** The gates the chain prompt
 itself declares (the prompt that owns `chainSteps`: what its `gateConfiguration.include` names and
@@ -432,9 +429,8 @@ does outside a chain.
 
 **Gates under mutation**: a gate whose `target_step_id` resolves to a node that later gets
 skipped never fires. A step-targeted gate also enters gate REVIEW only on the step it targets —
-an untargeted gate still reviews every step, run-wide inheritance unchanged. Known residual: a
-mutation-inserted node standing as the current step matches no parse-time step, so review falls
-back to run-wide for that step. So an inserted investigation node inherits the run-wide gates, plus
+an untargeted gate reviews every step. A mutation-inserted node standing as the current step
+matches no parse-time step, so its review uses the run-wide gates. So an inserted investigation node inherits the run-wide gates, plus
 the gates written on, or supplied by the prompt of, the step its unknown names in `target_step_id`;
 an unknown that names no step passes on no step's own gates. A FAIL on it opens a review as on any step that carries a gate. What
 it is spared is structural friction: it
@@ -495,10 +491,8 @@ the unknown: a textual match is a guess about your plan, and every other part of
 only to what was declared. A step that is genuinely affected but was never linked will not appear —
 declare the link.
 
-**Scope is blocking-only, deliberately.** Whether a NON-blocking unknown should ever raise an
-interrupt was considered and killed: the evidence that would settle it does not exist today (only a
-`diagnostics.info` line records the near-miss). It revives if a recorded mutation field shows a
-non-blocking resolution would have saved two or more steps.
+**Scope is blocking-only.** A non-blocking unknown raises no interrupt and changes no step; the
+`Adaptive mutation decision` diagnostics line records the policy's decision for it.
 
 **Audit trail**: `interrupts_raised` and `remainders_accepted` on the run's terminal
 `execution_records` row. `interrupts_raised` counts blocking LEDGER ENTRIES rather than raise
@@ -511,8 +505,8 @@ events — the interrupt re-raises on every call while the unknown stays open �
 
 When a run reaches a terminal state, the server stamps complexity facts onto that run's terminal
 `execution_records` row: steps planned, steps executed, gate verdict submissions, the FAIL subset
-of those submissions, unknowns opened / closed, and — since schema v23 — how many nodes the
-adaptive mutation policy inserted and skipped over the run's life (`nodes_inserted`,
+of those submissions, unknowns opened / closed, and how many nodes the adaptive mutation policy
+inserted and skipped over the run's life (`nodes_inserted`,
 `nodes_skipped`; see [Adaptive Mutation](#adaptive-mutation) above).
 
 They are written at the moment they are true because the state they come from does not survive:
@@ -521,9 +515,8 @@ server exits, and a review's `attemptCount` is destroyed the moment a PASS clear
 review. The ledger row is the only place these numbers persist.
 
 **Recorded, never modeled.** No coefficient, score, threshold, or routing decision is derived from
-any of them, and nothing in the runtime branches on their values. That is a deliberate constraint,
-not an unfinished feature: a scoring model with no named consumer is a guess that ossifies. When a
-consumer exists, it gets built against real history rather than against invented weights.
+any of them, and nothing in the runtime branches on their values. That is a deliberate constraint:
+a scoring model with no named consumer is a guess that ossifies.
 
 Both terminal paths carry them — a run that fails mid-chain records the same facts as one that
 completes. Non-terminal per-step rows leave them empty by design.
@@ -548,9 +541,8 @@ item is rejected when the prompt loads, naming the allowed values.
 
 **Semantics**: a step's `withhold` withholds those items from every LATER step's default render;
 a later step's own `expose` overrides that withhold for itself only — a step's own `withhold`
-never affects its own render, and `expose`-ing an item nobody withheld is a harmless no-op. No
-`visibility` declared anywhere in a chain renders byte-identically to a build without this
-feature.
+never affects its own render, and `expose`-ing an item nobody withheld is a harmless no-op. A
+chain that declares no `visibility` anywhere withholds nothing.
 
 **Named outputs are covered.** `outputMapping` names are published under the reserved `outputs`
 object (`{{outputs.findings}}`, never `{{findings}}`), so withholding `chain_history` removes them
@@ -791,7 +783,7 @@ apply to the step, the acknowledgement opens that step's own review. The acknowl
 
 The trailer routes the verdict to that step's review. It is never applied to the review of the
 step the run stands on, and each review is answered separately. A `gate_verdict` without a
-trailer is the current step's verdict, as before.
+trailer is the current step's verdict.
 
 - **PASS:** the review closes, and the recorded result stands.
 - **FAIL:** asks for a replacement. Re-run the worker and resume with its new result, ending with

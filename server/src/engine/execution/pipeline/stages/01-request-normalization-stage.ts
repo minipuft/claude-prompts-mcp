@@ -152,10 +152,6 @@ Note: When continuing a chain, the 'command' parameter is optional - the system 
       };
     }
 
-    if (context.mcpRequest.options) {
-      context.state.normalization.requestOptions = { ...context.mcpRequest.options };
-    }
-
     if (context.mcpRequest.inputs) {
       context.state.normalization.requestInputs = { ...context.mcpRequest.inputs };
     }

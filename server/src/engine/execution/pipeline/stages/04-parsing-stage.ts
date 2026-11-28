@@ -323,7 +323,7 @@ export class CommandParsingStage extends BasePipelineStage {
   }
 
   /**
-   * Merge legacy options and typed inputs under the inline values, validate the merged map and
+   * Merge the request's typed `inputs` under the inline values, validate the merged map and
    * return it. Symbolic commands merge in `SymbolicCommandBuilder`, onto their first prompt.
    */
   private mergeRequestArguments(
@@ -351,7 +351,7 @@ export class CommandParsingStage extends BasePipelineStage {
     return undefined;
   }
 
-  /** Request inputs/options merge later; `mergeRequestArguments` validates the merged map, not the inline one. */
+  /** Request `inputs` merge later; `mergeRequestArguments` validates the merged map, not the inline one. */
   private createArgumentContext(context: PromptRequestContext): ArgumentContext {
     return {
       environmentVars: process.env as Record<string, string>,
@@ -361,13 +361,10 @@ export class CommandParsingStage extends BasePipelineStage {
   }
 }
 
-/** The request's `options` and `inputs` as stage 01 captured them. */
+/** The request's `inputs` as stage 01 captured them. */
 function requestArgumentLayers(context: PromptRequestContext): RequestArgumentLayers {
-  const { requestOptions, requestInputs } = context.state.normalization;
-  return {
-    ...(requestOptions !== undefined ? { options: requestOptions } : {}),
-    ...(requestInputs !== undefined ? { inputs: requestInputs } : {}),
-  };
+  const { requestInputs } = context.state.normalization;
+  return requestInputs !== undefined ? { inputs: requestInputs } : {};
 }
 
 /**

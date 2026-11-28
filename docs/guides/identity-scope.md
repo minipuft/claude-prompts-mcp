@@ -19,11 +19,11 @@ MCP SDK handler ctx ──► RequestIdentityResolver ──► continuityScopeI
    ├─ http.req headers (gateway headers)                ├─ organizationId (fallback)
    └─ launch defaults (CLI flags)                       └─ "default" (single-tenant fallback)
 
-MCP request options ──► RequestIdentityResolver ──► clientProfile ──► handoff strategy
+Client signals ──────► RequestIdentityResolver ──► clientProfile ──► handoff strategy
    │                                                │
-   └─ options.client_profile (hint)                ├─ task_tool_v1 (Claude Code)
-                                                    ├─ spawn_agent_v1 (Codex)
-                                                    ├─ gemini_subagent_v1 (Gemini)
+   ├─ launch defaults (--client)                    ├─ task_tool_v1 (Claude Code)
+   ├─ trusted metadata (authInfo, x-client-*)       ├─ spawn_agent_v1 (Codex)
+   └─ SDK clientInfo (heuristic)                    ├─ gemini_subagent_v1 (Gemini)
                                                     ├─ opencode_agent_v1 (OpenCode)
                                                     ├─ cursor_agent_v1 (Cursor)
                                                     └─ neutral_v1 (unknown fallback)
@@ -239,7 +239,6 @@ The server resolves handoff client profile through this hierarchy (first match w
 | ----------------------------------------------------------------- | ----------- | ------------------------------------------------ |
 | Launch defaults (`identity.launchDefaults.client*`)               | Both        | Authoritative deployment default                 |
 | Trusted request metadata (`authInfo.extra`, `x-client-*` headers) | Mostly HTTP | Gateway/auth integration provides client profile |
-| Request hint (`options.client_profile`)                           | Both        | Caller passes protocol-level hint                |
 | SDK heuristic (`clientInfo.name/version`)                         | Both        | MCP SDK exposes client metadata                  |
 | Unknown fallback                                                  | Both        | No profile signal available (`neutral_v1`)       |
 

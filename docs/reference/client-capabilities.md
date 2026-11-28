@@ -52,9 +52,8 @@ The runtime resolves client profile with this precedence (first match wins):
 
 1. Launch defaults (`--client` / `identity.launchDefaults.client*`)
 2. Trusted request metadata (`authInfo.extra`, `x-client-*` headers)
-3. Request hint (`options.client_profile`)
-4. SDK heuristic (`clientInfo.name/version`)
-5. `unknown` fallback (`neutral_v1`)
+3. SDK heuristic (`clientInfo.name/version`)
+4. `unknown` fallback (`neutral_v1`)
 
 ## Protocol Limits (Important)
 

@@ -42,6 +42,7 @@ import { prompt_engineParameters } from '../../contracts/schemas/_generated/prom
 import { resource_managerParameters } from '../../contracts/schemas/_generated/resource_manager.generated.js';
 import { system_controlParameters } from '../../contracts/schemas/_generated/system_control.generated.js';
 
+import * as retirementNotices from '#shared/utils/_generated/retirement-notices.js';
 import { nearestDeclaredParameter } from '#shared/utils/nested-key-refusal.js';
 
 /** The three tools this server publishes, and the only names with a contract to read. */
@@ -154,11 +155,65 @@ export const GATE_PARAMETERS_UNAVAILABLE: UnavailableParameters = new Map(
   ])
 );
 
-/** Core run actions remain declared; only gate-dependent values need the gate system. */
+/** Longest `inputs` object a refusal echoes whole; past it, only the keys are shown. */
+const RESEND_ECHO_LIMIT = 300;
+
+/**
+ * The `inputs` object an `options` value's prompt arguments belong in, or '' when it carried none.
+ * `client_profile` is left out: it is not a prompt argument, and the replacement names its home.
+ */
+function describeInputsResend(value: unknown): string {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return '';
+  const promptValues = Object.fromEntries(
+    Object.entries(value).filter(([key]) => key !== 'client_profile')
+  );
+  const keys = Object.keys(promptValues);
+  if (keys.length === 0) return '';
+  const whole = JSON.stringify(promptValues);
+  const shown =
+    whole.length <= RESEND_ECHO_LIMIT
+      ? whole
+      : `{${keys.map((key) => `${JSON.stringify(key)}: …`).join(', ')}}`;
+  return ` For this call, send "inputs": ${shown}.`;
+}
+
+/** The refusal an `options` argument reads, whatever it holds: an empty object is refused too. */
+function describeRetiredOptionsRefusal(value: unknown): string {
+  const notice = retirementNotices.promptEngineOptions;
+  const retired = notice.retired.charAt(0).toUpperCase() + notice.retired.slice(1);
+  return (
+    `${retired} was retired in ${notice.refusedIn}; this call was refused and nothing ran. ` +
+    `Use ${notice.replacement}.${describeInputsResend(value)}`
+  );
+}
+
+/**
+ * Parameters `prompt_engine` refuses by name with their replacement. None is in the contract, so
+ * `tools/list` never advertises one; the schema's `.passthrough()` lets the key arrive here, where
+ * it is answered ahead of the generic "not a parameter" refusal.
+ */
+const RETIRED_PROMPT_ENGINE_PARAMETERS: ReadonlyMap<string, (value: unknown) => string> = new Map([
+  ['options', describeRetiredOptionsRefusal],
+]);
+
+function describeRetiredParameterRefusal(args: object): string | null {
+  const record = args as Record<string, unknown>;
+  const retired = sentKeys(args).find((key) => RETIRED_PROMPT_ENGINE_PARAMETERS.has(key));
+  if (retired === undefined) return null;
+  const describe = RETIRED_PROMPT_ENGINE_PARAMETERS.get(retired) as (value: unknown) => string;
+  return describe(record[retired]);
+}
+
+/**
+ * A retired parameter first, then undeclared and unavailable keys. Core run actions remain
+ * declared; only gate-dependent values need the gate system.
+ */
 export function describePromptEngineParameterRefusal(
   args: object,
   gateSystemEnabled: boolean
 ): string | null {
+  const retiredRefusal = describeRetiredParameterRefusal(args);
+  if (retiredRefusal !== null) return retiredRefusal;
   const keyRefusal = describeUndeclaredParameterRefusal(
     'prompt_engine',
     args,

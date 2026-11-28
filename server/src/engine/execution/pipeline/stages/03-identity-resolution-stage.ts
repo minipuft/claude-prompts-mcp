@@ -2,62 +2,11 @@
 import { BasePipelineStage } from '../stage.js';
 
 import type { Logger } from '#infra/logging/index.js';
-import type {
-  RequestClientProfileHint,
-  RequestIdentityResolverOptions,
-} from '#shared/utils/request-identity-resolver.js';
+import type { RequestIdentityResolverOptions } from '#shared/utils/request-identity-resolver.js';
 import type { PromptRequestContext } from '../../context/index.js';
 
 import { resolveRequestIdentityContext } from '#shared/utils/request-identity-resolver.js';
 import { resolveContinuityScopeId } from '#shared/utils/request-identity-scope.js';
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
-    return undefined;
-  }
-  return value as Record<string, unknown>;
-}
-
-function normalizeString(value: unknown): string | undefined {
-  if (typeof value !== 'string') {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
-// Parsing protocol hints is centralized here to keep RequestNormalizationStage request handling local.
-// eslint-disable-next-line complexity
-function extractClientProfileHintFromOptions(
-  options?: Record<string, unknown>
-): RequestClientProfileHint | undefined {
-  const clientProfile = asRecord(options?.['client_profile']);
-  if (clientProfile == null) {
-    return undefined;
-  }
-
-  const hint: RequestClientProfileHint = {
-    clientFamily: normalizeString(clientProfile['clientFamily'] ?? clientProfile['client_family']),
-    clientId: normalizeString(clientProfile['clientId'] ?? clientProfile['client_id']),
-    clientVersion: normalizeString(
-      clientProfile['clientVersion'] ?? clientProfile['client_version']
-    ),
-    delegationProfile: normalizeString(
-      clientProfile['delegationProfile'] ?? clientProfile['delegation_profile']
-    ),
-  };
-
-  if (
-    hint.clientFamily == null &&
-    hint.clientId == null &&
-    hint.clientVersion == null &&
-    hint.delegationProfile == null
-  ) {
-    return undefined;
-  }
-
-  return hint;
-}
 
 /**
  * Pipeline Stage 03: Identity Resolution
@@ -82,16 +31,7 @@ export class IdentityResolutionStage extends BasePipelineStage {
     this.logEntry(context);
 
     const sdkExtra = context.mcpRequest._extra ?? undefined;
-    const identityOptions = this.identityOptionsProvider();
-    const requestHint = extractClientProfileHintFromOptions(context.mcpRequest.options);
-    const effectiveOptions: RequestIdentityResolverOptions = {
-      mode: identityOptions.mode,
-      allowPerRequestOverride: identityOptions.allowPerRequestOverride,
-      launchDefaults: identityOptions.launchDefaults,
-      transportMode: identityOptions.transportMode,
-      ...(requestHint != null ? { requestClientProfileHint: requestHint } : {}),
-    };
-    const identityContext = resolveRequestIdentityContext(sdkExtra, effectiveOptions);
+    const identityContext = resolveRequestIdentityContext(sdkExtra, this.identityOptionsProvider());
     const scopeId = resolveContinuityScopeId(identityContext.identity);
 
     context.state.identity.resolved = true;

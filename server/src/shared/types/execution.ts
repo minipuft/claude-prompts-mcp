@@ -151,9 +151,6 @@ export interface McpToolRequest {
    */
   readonly gates?: readonly GateSpecification[];
 
-  /** Additional execution options forwarded to downstream stages */
-  readonly options?: Record<string, unknown>;
-
   /**
    * Typed prompt arguments supplied outside the command-string grammar.
    * Inline command arguments take precedence when the same key is present.

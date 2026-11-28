@@ -1,9 +1,9 @@
 /**
  * One driver per retirement ledger entry: each feeds the retired spelling to the boundary that
  * refuses it (the path resolver, the config loader, the transport router, the gate schema, the
- * `prompt_engine` input schema, the shipped `create_prompt` and `create_gate` builder scripts) and
- * returns the text a user reads. The table iterates the ledger, so an entry added without a driver
- * fails here, and `validate:retirements` (check 2) reads the keys of `DRIVERS` to report the same
+ * `prompt_engine` input schema and its parameter refusal, the shipped `create_prompt` and
+ * `create_gate` builder scripts) and returns the text a user reads. The table iterates the ledger,
+ * so an entry added without a driver fails here, and `validate:retirements` (check 2) reads the keys of `DRIVERS` to report the same
  * gap without running Jest.
  */
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
@@ -16,6 +16,7 @@ import { validateGateSchema } from '../../../src/engine/gates/core/gate-schema.j
 import { ConfigLoader } from '../../../src/infra/config/index.js';
 import { TransportRouter } from '../../../src/infra/http/transport/index.js';
 import { buildPromptEngineSchema } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
+import { describePromptEngineParameterRefusal } from '../../../src/mcp/tools/shared/undeclared-parameters.js';
 import { ScriptToolDefinitionLoader } from '../../../src/modules/automation/core/script-definition-loader.js';
 import { runSkillsSyncCommand } from '../../../src/modules/skills-sync/service.js';
 import { PathResolver } from '../../../src/runtime/paths.js';
@@ -274,6 +275,18 @@ const DRIVERS: Readonly<Record<string, Driver>> = {
     });
     if (result.success) throw new Error('prompt_engine accepted a string gate_verdict');
     return result.error.issues.map((issue) => issue.message).join('\n');
+  },
+  'prompt-engine-options': () => {
+    // The schema passes the key through; the registered callback refuses it with this function.
+    const parsed = buildPromptEngineSchema().safeParse({
+      command: '>>demo',
+      options: { topic: 'probe' },
+    });
+    if (!parsed.success)
+      throw new Error('the prompt_engine schema stopped options before its refusal');
+    const refusal = describePromptEngineParameterRefusal(parsed.data, true);
+    if (refusal === null) throw new Error('prompt_engine accepted an options argument');
+    return refusal;
   },
   'command-framework-at-sigil': () =>
     rejectedMessage(() => commandParser().parseCommand('@CAGEERF >>demo', [demoPrompt()])),

@@ -24,6 +24,7 @@ import { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 
 import { McpToolRouter } from '../../../src/mcp/tools/index.js';
+import * as retirementNotices from '../../../src/shared/utils/_generated/retirement-notices.js';
 import type { PromptExecutor } from '../../../src/mcp/tools/prompt-engine/core/prompt-executor.js';
 import type { PromptEngineInput } from '../../../src/mcp/tools/schemas/prompt-engine.schema.js';
 
@@ -271,6 +272,84 @@ describe('registered prompt_engine action admission', () => {
       }
     }
   );
+
+  describe('the retired options parameter', () => {
+    const notice = retirementNotices.promptEngineOptions;
+
+    it.each([
+      ['a prompt value', { topic: 'probe' }],
+      ['only client_profile', { client_profile: { clientFamily: 'codex' } }],
+      ['an empty object', {}],
+    ] as const)(
+      'refuses options holding %s by name, in both gate states',
+      async (_label, value) => {
+        for (const enabled of [true, false]) {
+          const fixture = await registered(enabled);
+          try {
+            const result = await fixture.call({ command: '>>demo', options: value });
+            const text = JSON.stringify(result.content);
+            expect(result.isError).toBe(true);
+            expect(result.content[0]?.text).toContain(notice.replacement);
+            expect(result.content[0]?.text).toContain(`was retired in ${notice.refusedIn}`);
+            expect(text).not.toContain('is not a parameter');
+            expect(fixture.execute).not.toHaveBeenCalled();
+          } finally {
+            await fixture.server.close();
+          }
+        }
+      }
+    );
+
+    it('shows the inputs object for the prompt values it carried, never client_profile', async () => {
+      const fixture = await registered(true);
+      try {
+        const withValues = await fixture.call({
+          command: '>>demo',
+          options: { topic: 'probe', client_profile: { clientFamily: 'codex' } },
+        });
+        expect(withValues.content[0]?.text).toContain(
+          'For this call, send "inputs": {"topic":"probe"}.'
+        );
+        const profileOnly = await fixture.call({
+          command: '>>demo',
+          options: { client_profile: { clientFamily: 'codex' } },
+        });
+        expect(profileOnly.content[0]?.text).not.toContain('For this call');
+      } finally {
+        await fixture.server.close();
+      }
+    });
+
+    it('answers a pause carrying options with the same refusal', async () => {
+      const fixture = await registered(true);
+      try {
+        const result = await fixture.call({
+          chain_id: 'chain-demo#1',
+          gate_action: 'pause',
+          options: {},
+        });
+        expect(result.isError).toBe(true);
+        expect(result.content[0]?.text).toContain(notice.replacement);
+        expect(fixture.execute).not.toHaveBeenCalled();
+      } finally {
+        await fixture.server.close();
+      }
+    });
+
+    it('CONTROL: the same value in inputs reaches the executor', async () => {
+      const fixture = await registered(true);
+      try {
+        const result = await fixture.call({ command: '>>demo', inputs: { topic: 'probe' } });
+        expect(result.isError).toBe(false);
+        expect(fixture.execute).toHaveBeenCalledWith(
+          { command: '>>demo', inputs: { topic: 'probe' } },
+          expect.anything()
+        );
+      } finally {
+        await fixture.server.close();
+      }
+    });
+  });
 
   it('checks current gate state on a cached schema in both toggle directions', async () => {
     const fixture = await registered(true);

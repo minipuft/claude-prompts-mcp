@@ -413,7 +413,6 @@ const PARAM_DEFAULTS = {
     'Your Step output to capture before advancing. Supply the same text you would reply with during manual execution.',
   gates:
     'Unified gate specification - Accepts gate IDs (strings), custom checks ({name, description}), or full gate definitions. Supports mixed types in single array for maximum flexibility. Canonical parameter for all gate specification (v3.0.0+).',
-  options: 'Additional execution options (key-value pairs) passed through to execution.',
   inputs:
     'Typed prompt arguments. Use for arrays/objects or values that must bypass command-string quoting. Inline command arguments win on duplicate keys.',
   workflow:
@@ -483,11 +482,6 @@ function buildCoreFields(resolve: DescriptionResolver) {
       .min(1, 'User response cannot be empty if provided')
       .optional()
       .describe(resolve('user_response', PARAM_DEFAULTS.user_response)),
-
-    options: z
-      .record(z.string(), z.any())
-      .optional()
-      .describe(resolve('options', PARAM_DEFAULTS.options)),
 
     inputs: z
       .record(z.string(), z.any())
@@ -613,7 +607,6 @@ export const CONTROL_EXCLUSIVE_PARAMETERS = [
   'handoff',
   'claim_token',
   'inputs',
-  'options',
   'gates',
 ] as const;
 

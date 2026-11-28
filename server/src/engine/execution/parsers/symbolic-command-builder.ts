@@ -145,7 +145,7 @@ export class SymbolicCommandBuilder {
    * client error the caller renders before any store is touched, and an unregistered prompt
    * still throws `PromptError`.
    *
-   * `requestArguments` (the request's `inputs` and legacy `options`) are merged here, onto the
+   * `requestArguments` (the request's `inputs`) are merged here, onto the
    * arguments of the command's FIRST prompt, before anything is derived from them — a chain
    * prompt's steps, the IR the validator checks, the run-level `promptArgs` — and the merged map
    * is validated once. Merged afterwards, as the stage once did, the values landed on a copy
@@ -644,7 +644,7 @@ export class SymbolicCommandBuilder {
   }
 
   /**
-   * The request's `inputs`/`options` merge AFTER the command text resolves, and the merged map is
+   * The request's `inputs` merge AFTER the command text resolves, and the merged map is
    * what `applyRequestArguments` validates; checking the text-only map first refused `''` against
    * a pattern the request's own value satisfies, and `parseArgumentsSafely` turned the refusal
    * into an empty map.
@@ -657,7 +657,7 @@ export class SymbolicCommandBuilder {
     };
   }
 
-  /** The request channels laid under the segment's text, then the merged map validated. */
+  /** The request's `inputs` laid under the segment's text, then the merged map validated. */
   private applyRequestArguments(
     prompt: ConvertedPrompt,
     resolved: Record<string, unknown>,
